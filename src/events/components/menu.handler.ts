@@ -38,7 +38,7 @@ import {
   questService,
   shopService,
 } from '../../services/index.js';
-import { embedColors, errorEmbed, formatCoins, infoEmbed, profileEmbed, progressBar, successEmbed } from '../../utils/embeds.js';
+import { embedColors, errorEmbed, formatCoins, infoEmbed, profileEmbed } from '../../utils/embeds.js';
 import { formatCooldown } from '../../utils/cooldowns.js';
 import { dailyResetLine } from '../../utils/daily-reset.js';
 import {
@@ -73,6 +73,32 @@ interface MenuContext {
   userId: string;
   guildId: string;
   key: UserKey;
+}
+
+interface MenuPayload {
+  embed: EmbedBuilder;
+  components: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder | UserSelectMenuBuilder>[];
+}
+
+/** Discord.js expects `embeds[]`; our builders use a single `embed`. */
+function toMessageOptions(payload: MenuPayload | { embeds: EmbedBuilder[]; components: MenuPayload['components'] }) {
+  if ('embeds' in payload) {
+    return { embeds: payload.embeds, components: payload.components };
+  }
+  return { embeds: [payload.embed], components: payload.components };
+}
+
+async function applyMenuPayload(
+  interaction: MessageComponentInteraction,
+  payload: MenuPayload,
+  mode: 'update' | 'edit',
+): Promise<void> {
+  const options = toMessageOptions(payload);
+  if (mode === 'edit') {
+    await interaction.editReply(options);
+  } else {
+    await interaction.update(options);
+  }
 }
 
 function parseUserIdFromParts(parts: string[], index: number): string | null {
@@ -450,24 +476,21 @@ async function showCategory(
   category: string,
   editReply = false,
 ): Promise<void> {
-  const apply = async (payload: {
-    embed: EmbedBuilder;
-    components: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[];
-  }) => {
-    if (editReply) {
-      await interaction.editReply(payload);
-    } else {
-      await interaction.update(payload);
-    }
-  };
-
   switch (category) {
     case 'economy': {
-      await apply(await buildEconomyPayload(ctx.key, ctx.userId));
+      await applyMenuPayload(
+        interaction,
+        await buildEconomyPayload(ctx.key, ctx.userId),
+        editReply ? 'edit' : 'update',
+      );
       return;
     }
     case 'jobs': {
-      await apply(await buildJobsPayload(ctx.key, ctx.userId));
+      await applyMenuPayload(
+        interaction,
+        await buildJobsPayload(ctx.key, ctx.userId),
+        editReply ? 'edit' : 'update',
+      );
       return;
     }
     case 'games': {
@@ -479,19 +502,28 @@ async function showCategory(
         ...payload.components,
         new ActionRowBuilder<ButtonBuilder>().addComponents(backButton(ctx.userId)),
       ];
+      const options = { embeds: [embed], components };
       if (editReply) {
-        await interaction.editReply({ embeds: [embed], components });
+        await interaction.editReply(options);
       } else {
-        await interaction.update({ embeds: [embed], components });
+        await interaction.update(options);
       }
       return;
     }
     case 'shop': {
-      await apply(await buildShopPayload(ctx.key, ctx.userId));
+      await applyMenuPayload(
+        interaction,
+        await buildShopPayload(ctx.key, ctx.userId),
+        editReply ? 'edit' : 'update',
+      );
       return;
     }
     case 'progression': {
-      await apply(buildProgressionPayload(ctx.userId));
+      await applyMenuPayload(
+        interaction,
+        buildProgressionPayload(ctx.userId),
+        editReply ? 'edit' : 'update',
+      );
       return;
     }
     default:
@@ -585,7 +617,7 @@ export async function handleMenuSelect(interaction: StringSelectMenuInteraction)
     payload.embed.setDescription(
       `${payload.embed.data.description ?? ''}\n\n✅ Active job set to **${user.activeJob}**.`,
     );
-    await interaction.editReply(payload);
+    await interaction.editReply(toMessageOptions(payload));
     return;
   }
 
@@ -599,7 +631,7 @@ export async function handleMenuSelect(interaction: StringSelectMenuInteraction)
     payload.embed.setDescription(
       `${payload.embed.data.description ?? ''}\n\n✅ Purchased **${upgradeId}** upgrade.`,
     );
-    await interaction.editReply(payload);
+    await interaction.editReply(toMessageOptions(payload));
     return;
   }
 
@@ -685,7 +717,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
       if (!ctx) return;
       await interaction.deferUpdate();
       const payload = await buildMainMenuPayload(ctx.key, ctx.userId);
-      await interaction.editReply(payload);
+      await interaction.editReply(toMessageOptions(payload));
       return;
     }
 
@@ -697,11 +729,13 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
       if (!ctx) return;
       await interaction.deferUpdate();
       if (target === 'prog') {
-        await interaction.editReply(buildProgressionPayload(ctx.userId));
+        await interaction.editReply(toMessageOptions(buildProgressionPayload(ctx.userId)));
         return;
       }
       if (target === 'eco') {
-        await interaction.editReply(await buildEconomyPayload(ctx.key, ctx.userId));
+        await interaction.editReply(
+          toMessageOptions(await buildEconomyPayload(ctx.key, ctx.userId)),
+        );
         return;
       }
       return;
@@ -766,22 +800,24 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
               { name: 'Net Worth', value: formatCoins(balance.netWorth), inline: true },
             );
           const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-          await interaction.editReply({ embeds: [embed, payload.embed], components: payload.components });
+          await interaction.editReply({
+            embeds: [embed, payload.embed],
+            components: payload.components,
+          });
           return;
         }
         case 'daily': {
           const result = await economyService.applyDaily(ctx.key);
           await emitDailyClaimEvents(ctx.key, result.streak);
-          await interaction.followUp({
-            embeds: [
-              successEmbed(
-                'Daily Reward',
-                `+${formatCoins(result.amount)} · Streak **${result.streak}** day(s)`,
-              ),
-            ],
-            ephemeral: false,
-          });
-          await interaction.editReply(await buildEconomyPayload(ctx.key, ctx.userId));
+          const payload = await buildEconomyPayload(ctx.key, ctx.userId);
+          payload.embed.setDescription(
+            [
+              payload.embed.data.description ?? '',
+              '',
+              `✅ **Daily claimed** — +${formatCoins(result.amount)} · Streak **${result.streak}** day(s)`,
+            ].join('\n'),
+          );
+          await interaction.editReply(toMessageOptions(payload));
           return;
         }
         case 'tx': {
@@ -826,16 +862,16 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
       await emitLevelUpEvents(ctx.key, previousLevel, result.user.level);
 
       const title = result.critical ? 'Critical work success!' : 'Work complete';
-      const embed = successEmbed(title)
-        .setColor(embedColors.economy)
-        .addFields(
-          { name: 'Job', value: result.jobName, inline: true },
-          { name: 'Payout', value: formatCoins(result.payout), inline: true },
-          { name: 'XP', value: `+${result.xp}`, inline: true },
-        );
-
-      await interaction.followUp({ embeds: [embed], ephemeral: false });
-      await interaction.editReply(await buildJobsPayload(ctx.key, ctx.userId));
+      const payload = await buildJobsPayload(ctx.key, ctx.userId);
+      payload.embed.setDescription(
+        [
+          payload.embed.data.description ?? '',
+          '',
+          `✅ **${title}**`,
+          `**${result.jobName}** — +${formatCoins(result.payout)} · +${result.xp} XP`,
+        ].join('\n'),
+      );
+      await interaction.editReply(toMessageOptions(payload));
       return;
     }
 
@@ -1024,17 +1060,16 @@ export async function handleMenuModal(interaction: ModalSubmitInteraction): Prom
       }
       const user = await economyService.deposit(ctx.key, amount);
       await emitDepositEvents(ctx.key, amount);
-      await interaction.followUp({
-        embeds: [
-          successEmbed(
-            'Deposited',
-            `${formatCoins(amount)} moved to bank.\nWallet: ${formatCoins(user.wallet)} · Bank: ${formatCoins(user.bank)}`,
-          ),
-        ],
-        ephemeral: false,
-      });
       const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-      await interaction.editReply(payload);
+      payload.embed.setDescription(
+        [
+          payload.embed.data.description ?? '',
+          '',
+          `✅ **Deposited** — ${formatCoins(amount)} to bank`,
+          `Wallet: ${formatCoins(user.wallet)} · Bank: ${formatCoins(user.bank)}`,
+        ].join('\n'),
+      );
+      await interaction.editReply(toMessageOptions(payload));
       return;
     }
 
@@ -1043,17 +1078,16 @@ export async function handleMenuModal(interaction: ModalSubmitInteraction): Prom
         throw new ValidationError('Enter a valid amount.');
       }
       const user = await economyService.withdraw(ctx.key, amount);
-      await interaction.followUp({
-        embeds: [
-          successEmbed(
-            'Withdrawn',
-            `${formatCoins(amount)} moved to wallet.\nWallet: ${formatCoins(user.wallet)} · Bank: ${formatCoins(user.bank)}`,
-          ),
-        ],
-        ephemeral: false,
-      });
       const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-      await interaction.editReply(payload);
+      payload.embed.setDescription(
+        [
+          payload.embed.data.description ?? '',
+          '',
+          `✅ **Withdrawn** — ${formatCoins(amount)} to wallet`,
+          `Wallet: ${formatCoins(user.wallet)} · Bank: ${formatCoins(user.bank)}`,
+        ].join('\n'),
+      );
+      await interaction.editReply(toMessageOptions(payload));
       return;
     }
 
@@ -1069,17 +1103,15 @@ export async function handleMenuModal(interaction: ModalSubmitInteraction): Prom
         'transfer_out',
       );
       await emitPayEvents(ctx.key, result.sent);
-      await interaction.followUp({
-        embeds: [
-          successEmbed(
-            'Payment sent',
-            `Sent **${formatCoins(result.sent)}** (received **${formatCoins(result.received)}**).`,
-          ),
-        ],
-        ephemeral: false,
-      });
       const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-      await interaction.editReply(payload);
+      payload.embed.setDescription(
+        [
+          payload.embed.data.description ?? '',
+          '',
+          `✅ **Payment sent** — ${formatCoins(result.sent)} (received ${formatCoins(result.received)})`,
+        ].join('\n'),
+      );
+      await interaction.editReply(toMessageOptions(payload));
     }
   } catch (err) {
     await handleMenuError(interaction, err);
