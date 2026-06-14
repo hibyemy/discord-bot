@@ -20,7 +20,7 @@ export interface QuestPoolEntry {
 
 export const questConfig = {
   dailyQuestCount: 3,
-  /** Streak bonus if all 3 completed: +20% per day, cap 7 days */
+  /** Streak bonus on each quest claim: +20% per day, cap 7 days */
   streakBonusPerDay: 0.2,
   streakBonusCap: 7,
   resetCron: '0 0 * * *',

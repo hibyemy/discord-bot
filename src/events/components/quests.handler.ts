@@ -12,57 +12,96 @@ import { achievementService, progressionService, questService } from '../../serv
 import { embedColors, errorEmbed, formatCoins, progressBar } from '../../utils/embeds.js';
 import { questConfig } from '../../config/quests.js';
 
-export const QUEST_CLAIM_CUSTOM_ID = 'quests:claim';
+export const QUEST_CLAIM_PREFIX = 'quests:claim:';
+
+export function isQuestClaimButton(customId: string): boolean {
+  return customId.startsWith(QUEST_CLAIM_PREFIX);
+}
+
+export function parseQuestClaimId(customId: string): string | null {
+  if (!customId.startsWith(QUEST_CLAIM_PREFIX)) return null;
+  const questId = customId.slice(QUEST_CLAIM_PREFIX.length);
+  return questId.length > 0 ? questId : null;
+}
 
 export function questBoardEmbed(board: QuestBoard): EmbedBuilder {
-  const baseCoins = board.quests.reduce((sum, q) => sum + q.rewardCoins, 0);
-  const baseXp = board.quests.reduce((sum, q) => sum + q.rewardXp, 0);
   const bonusPct = Math.round(board.streakBonus * questConfig.streakBonusPerDay * 100);
+  const claimable = board.quests.filter((q) => q.completed && !q.claimed).length;
 
   const questLines = board.quests.map((quest) => {
-    const icon = quest.completed ? '✅' : '⬜';
+    const status = quest.claimed ? '💰' : quest.completed ? '✅' : '⬜';
     const bar = progressBar(quest.progress, quest.target);
+    const claimState = quest.claimed
+      ? '_Claimed_'
+      : quest.completed
+        ? '_Ready to claim_'
+        : '_In progress_';
     return [
-      `${icon} **${quest.description}**`,
+      `${status} **${quest.description}**`,
       `${bar} ${Math.min(quest.progress, quest.target)}/${quest.target}`,
-      `Reward: ${formatCoins(quest.rewardCoins)} + ${quest.rewardXp} XP`,
+      `Reward: ${formatCoins(quest.rewardCoins)} + ${quest.rewardXp} XP · ${claimState}`,
     ].join('\n');
   });
 
   const footerParts = [
-    `Progress: ${board.completed}/${board.quests.length}`,
+    `Completed: ${board.completed}/${board.quests.length}`,
+    `Claimable: ${claimable}`,
     `Streak bonus: +${bonusPct}%`,
-    `Pool total: ${formatCoins(baseCoins)} + ${baseXp} XP`,
   ];
 
   if (board.claimed) {
-    footerParts.push('Rewards claimed');
-  } else if (board.allComplete) {
-    footerParts.push('All quests complete — claim your rewards');
+    footerParts.push('All rewards claimed');
+  } else if (claimable > 0) {
+    footerParts.push('Claim each finished quest individually');
   }
 
   return new EmbedBuilder()
-    .setColor(board.allComplete ? embedColors.success : embedColors.info)
+    .setColor(board.claimed ? embedColors.success : embedColors.info)
     .setTitle('Daily Quests')
     .setDescription(questLines.join('\n\n'))
     .setFooter({ text: footerParts.join(' • ') });
 }
 
-export function questClaimButtonRow(board: QuestBoard): ActionRowBuilder<ButtonBuilder> {
-  const disabled = board.claimed || !board.allComplete;
-  const label = board.claimed
-    ? 'Claimed'
-    : board.allComplete
-      ? 'Claim Rewards'
-      : 'Complete All Quests';
+export function questClaimButtonRows(board: QuestBoard): ActionRowBuilder<ButtonBuilder>[] {
+  const buttons = board.quests.map((quest, index) => {
+    const shortLabel = quest.description.length > 18
+      ? `Quest ${index + 1}`
+      : quest.description;
 
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(QUEST_CLAIM_CUSTOM_ID)
-      .setLabel(label)
-      .setStyle(board.claimed ? ButtonStyle.Secondary : ButtonStyle.Success)
-      .setDisabled(disabled),
-  );
+    if (quest.claimed) {
+      return new ButtonBuilder()
+        .setCustomId(`${QUEST_CLAIM_PREFIX}${quest.id}`)
+        .setLabel(`${shortLabel} ✓`)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true);
+    }
+
+    if (quest.completed) {
+      return new ButtonBuilder()
+        .setCustomId(`${QUEST_CLAIM_PREFIX}${quest.id}`)
+        .setLabel(`Claim ${shortLabel}`)
+        .setStyle(ButtonStyle.Success);
+    }
+
+    return new ButtonBuilder()
+      .setCustomId(`${QUEST_CLAIM_PREFIX}${quest.id}`)
+      .setLabel(shortLabel)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true);
+  });
+
+  const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+  for (let i = 0; i < buttons.length; i += 3) {
+    rows.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(i, i + 3)),
+    );
+  }
+  return rows;
+}
+
+/** @deprecated Use questClaimButtonRows */
+export function questClaimButtonRow(board: QuestBoard): ActionRowBuilder<ButtonBuilder> {
+  return questClaimButtonRows(board)[0] ?? new ActionRowBuilder<ButtonBuilder>();
 }
 
 export async function handleQuestClaimButton(
@@ -76,31 +115,41 @@ export async function handleQuestClaimButton(
     return;
   }
 
+  const questId = parseQuestClaimId(interaction.customId);
+  if (!questId) return;
+
   const key = { discordId: interaction.user.id, guildId: interaction.guildId };
 
   try {
     const boardBefore = await questService.getDailyQuests(key);
     const previousLevel = await progressionService.getLevel(key);
-    const result = await questService.claimReward(key);
+    const result = await questService.claimQuestReward(key, questId);
     const refreshed = await questService.getDailyQuests(key);
     const newLevel = await progressionService.getLevel(key);
     await emitLevelUpEvents(key, previousLevel, newLevel);
-    await achievementService.checkAndAward(key, 'quest_streak', {
-      value: boardBefore.streakBonus + 1,
-    });
+
+    if (refreshed.claimed) {
+      await achievementService.checkAndAward(key, 'quest_streak', {
+        value: boardBefore.streakBonus + 1,
+      });
+    }
 
     await interaction.update({
       embeds: [questBoardEmbed(refreshed)],
-      components: [questClaimButtonRow(refreshed)],
+      components: questClaimButtonRows(refreshed),
     });
 
+    const quest = boardBefore.quests.find((q) => q.id === questId);
     await interaction.followUp({
       embeds: [
         new EmbedBuilder()
           .setColor(embedColors.success)
-          .setTitle('Quest Rewards Claimed')
+          .setTitle('Quest Reward Claimed')
           .setDescription(
-            `You received **${formatCoins(result.coins)}** and **${result.xp} XP**.`,
+            [
+              quest ? `**${quest.description}**` : 'Quest complete',
+              `You received **${formatCoins(result.coins)}** and **${result.xp} XP**.`,
+            ].join('\n'),
           ),
       ],
       ephemeral: true,

@@ -49,6 +49,7 @@ export interface WorkResult {
   jobName: string;
   cooldownMs: number;
   user: User;
+  taskLabel?: string;
 }
 
 export interface ShopItem {
@@ -77,6 +78,7 @@ export interface QuestDefinition {
   target: number;
   progress: number;
   completed: boolean;
+  claimed: boolean;
   rewardCoins: number;
   rewardXp: number;
 }
@@ -164,7 +166,7 @@ export interface IShopService {
 export interface IQuestService {
   getDailyQuests(key: UserKey): Promise<QuestBoard>;
   updateProgress(event: import('./events.js').QuestEvent): Promise<void>;
-  claimReward(key: UserKey): Promise<{ coins: number; xp: number }>;
+  claimQuestReward(key: UserKey, questId: string): Promise<{ coins: number; xp: number }>;
   resetAllDaily(): Promise<number>;
   generateDailyQuests(key: UserKey): Promise<QuestBoard>;
 }

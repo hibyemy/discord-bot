@@ -2,9 +2,9 @@ import { SlashCommandBuilder } from 'discord.js';
 import { questService } from '../../services/index.js';
 import {
   handleQuestClaimButton,
-  QUEST_CLAIM_CUSTOM_ID,
+  isQuestClaimButton,
   questBoardEmbed,
-  questClaimButtonRow,
+  questClaimButtonRows,
 } from '../../events/components/quests.handler.js';
 import { userKey } from '../economy/helpers.js';
 import type { Command } from '../types.js';
@@ -21,30 +21,34 @@ const command: Command = {
 
     const reply = await interaction.reply({
       embeds: [questBoardEmbed(board)],
-      components: [questClaimButtonRow(board)],
+      components: questClaimButtonRows(board),
       fetchReply: true,
     });
 
-    if (board.claimed || !board.allComplete) return;
+    const hasClaimable = board.quests.some((q) => q.completed && !q.claimed);
+    if (!hasClaimable) return;
 
     const collector = reply.createMessageComponentCollector({
       time: COLLECTOR_MS,
     });
 
     collector.on('collect', async (componentInteraction) => {
-      if (componentInteraction.customId !== QUEST_CLAIM_CUSTOM_ID) return;
+      if (!isQuestClaimButton(componentInteraction.customId)) return;
       if (!componentInteraction.isButton()) return;
       if (componentInteraction.user.id !== interaction.user.id) return;
 
       await handleQuestClaimButton(componentInteraction);
-      collector.stop('claimed');
+      const refreshed = await questService.getDailyQuests(key);
+      if (!refreshed.quests.some((q) => q.completed && !q.claimed)) {
+        collector.stop('claimed');
+      }
     });
 
     collector.on('end', async () => {
       try {
         const refreshed = await questService.getDailyQuests(key);
         await reply.edit({
-          components: [questClaimButtonRow(refreshed)],
+          components: questClaimButtonRows(refreshed),
         });
       } catch {
         // Message may have been deleted.

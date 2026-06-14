@@ -17,16 +17,20 @@ import {
 } from 'discord.js';
 import type { Transaction } from '@prisma/client';
 import type { AchievementCategory } from '../../config/achievements.js';
-import { getJobByName } from '../../config/jobs.js';
+import { getJobByName, getWorkTaskById } from '../../config/jobs.js';
 import { formatRankTier, getRankTierForLevel } from '../../config/ranks.js';
 import { GamblebotError, ValidationError } from '../../contracts/errors.js';
 import type { UserKey } from '../../contracts/services.js';
 import { emitDailyClaimEvents, emitDepositEvents, emitLevelUpEvents, emitPayEvents, emitShopPurchaseEvents, emitWorkEvents } from '../hooks.js';
 import { buildPlayMenuPayload } from './play.handler.js';
 import {
+  buildWorkTaskPickerRows,
+  startFocusWorkSession,
+} from './focus-work.handler.js';
+import {
   handleQuestClaimButton,
   questBoardEmbed,
-  questClaimButtonRow,
+  questClaimButtonRows,
 } from './quests.handler.js';
 import {
   achievementService,
@@ -316,6 +320,8 @@ async function buildJobsPayload(key: UserKey, userId: string) {
         ? `**Work cooldown:** ${formatCooldown(cooldownMs)}`
         : '**Ready to work!**',
       '',
+            '_Work: pick a task. **Focus Shift**: tier-based mini-challenges with higher pay._',
+      '',
       dailyResetLine(),
     ].join('\n'),
   );
@@ -343,7 +349,7 @@ async function buildJobsPayload(key: UserKey, userId: string) {
   }
 
   const workLabel =
-    cooldownMs > 0 ? `Work (${formatCooldown(cooldownMs)})` : 'Work now';
+    cooldownMs > 0 ? `Work (${formatCooldown(cooldownMs)})` : 'Pick work task';
 
   components.push(
     new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -351,6 +357,11 @@ async function buildJobsPayload(key: UserKey, userId: string) {
         .setCustomId(`${PREFIX}job:work:${userId}`)
         .setLabel(workLabel)
         .setStyle(cooldownMs > 0 ? ButtonStyle.Secondary : ButtonStyle.Success)
+        .setDisabled(cooldownMs > 0 || !active),
+      new ButtonBuilder()
+        .setCustomId(`${PREFIX}job:focus:${userId}`)
+        .setLabel(cooldownMs > 0 ? `Focus (${formatCooldown(cooldownMs)})` : 'Focus Shift')
+        .setStyle(cooldownMs > 0 ? ButtonStyle.Secondary : ButtonStyle.Primary)
         .setDisabled(cooldownMs > 0 || !active),
       backButton(userId),
     ),
@@ -710,6 +721,47 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
       return;
     }
 
+    if (section === 'jobtask') {
+      const taskUserId = parts[2];
+      const taskId = parts[3];
+      if (!taskUserId || !taskId) return;
+      const taskCtx = await getMenuContext(interaction, taskUserId);
+      if (!taskCtx) return;
+      await interaction.deferUpdate();
+
+      const task = getWorkTaskById(taskId);
+      if (!task) {
+        await interaction.editReply({
+          embeds: [errorEmbed('Unknown work task.')],
+          components: [],
+        });
+        return;
+      }
+
+      const previousLevel = await progressionService.getLevel(taskCtx.key);
+      const result = await jobService.work(taskCtx.key, {
+        taskMultiplier: task.multiplier,
+        taskLabel: task.label,
+      });
+      await emitWorkEvents(taskCtx.key, result.critical);
+      await emitLevelUpEvents(taskCtx.key, previousLevel, result.user.level);
+
+      const title = result.critical ? 'Critical work success!' : 'Work complete';
+      const payload = await buildJobsPayload(taskCtx.key, taskCtx.userId);
+      payload.embed.setDescription(
+        [
+          payload.embed.data.description ?? '',
+          '',
+          `✅ **${title}**`,
+          `**${result.jobName}** · **${task.label}**`,
+          task.flavor,
+          `+${formatCoins(result.payout)} · +${result.xp} XP`,
+        ].join('\n'),
+      );
+      await interaction.editReply(toMessageOptions(payload));
+      return;
+    }
+
     const userId = parts[parts.length - 1];
     if (!userId) return;
     const ctx = await getMenuContext(interaction, userId);
@@ -825,22 +877,27 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
     }
 
     if (section === 'job' && parts[2] === 'work') {
-      const previousLevel = await progressionService.getLevel(ctx.key);
-      const result = await jobService.work(ctx.key);
-      await emitWorkEvents(ctx.key, result.critical);
-      await emitLevelUpEvents(ctx.key, previousLevel, result.user.level);
-
-      const title = result.critical ? 'Critical work success!' : 'Work complete';
+      const { tasks, row } = buildWorkTaskPickerRows(`${PREFIX}job:`, ctx.userId);
       const payload = await buildJobsPayload(ctx.key, ctx.userId);
       payload.embed.setDescription(
         [
           payload.embed.data.description ?? '',
           '',
-          `✅ **${title}**`,
-          `**${result.jobName}** — +${formatCoins(result.payout)} · +${result.xp} XP`,
+          '**Choose your shift task** — each option gives a small payout bonus:',
+          ...tasks.map(
+            (task) => `${task.emoji} **${task.label}** (+${Math.round((task.multiplier - 1) * 100)}%)`,
+          ),
         ].join('\n'),
       );
-      await interaction.editReply(toMessageOptions(payload));
+      await interaction.editReply({
+        embeds: [payload.embed],
+        components: [row, new ActionRowBuilder<ButtonBuilder>().addComponents(backButton(ctx.userId))],
+      });
+      return;
+    }
+
+    if (section === 'job' && parts[2] === 'focus') {
+      await startFocusWorkSession(interaction, ctx.key);
       return;
     }
 
@@ -944,7 +1001,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
           await interaction.editReply({
             embeds: [questEmbed],
             components: [
-              questClaimButtonRow(board),
+              ...questClaimButtonRows(board),
               new ActionRowBuilder<ButtonBuilder>().addComponents(backToProgressionButton(userId)),
             ],
           });

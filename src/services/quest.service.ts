@@ -16,6 +16,7 @@ interface StoredQuestState {
   poolId: string;
   progress: number;
   completed: boolean;
+  claimed?: boolean;
   winStreak?: number;
 }
 
@@ -65,11 +66,15 @@ function toStoredQuests(entries: QuestPoolEntry[]): StoredQuestState[] {
     poolId: entry.id,
     progress: 0,
     completed: false,
+    claimed: false,
   }));
 }
 
 function parseStoredQuests(quests: QuestProgress['quests']): StoredQuestState[] {
-  return quests as unknown as StoredQuestState[];
+  return (quests as unknown as StoredQuestState[]).map((state) => ({
+    ...state,
+    claimed: state.claimed ?? false,
+  }));
 }
 
 function toQuestBoard(record: QuestProgress): QuestBoard {
@@ -82,19 +87,21 @@ function toQuestBoard(record: QuestProgress): QuestBoard {
       target: pool.target,
       progress: state.progress,
       completed: state.completed,
+      claimed: state.claimed ?? false,
       rewardCoins: pool.rewardCoins,
       rewardXp: pool.rewardXp,
     };
   });
 
   const allComplete = quests.length > 0 && quests.every((q) => q.completed);
+  const allClaimed = quests.length > 0 && quests.every((q) => q.claimed);
 
   return {
     quests,
     completed: record.completed,
     streakBonus: record.streakBonus,
     allComplete,
-    claimed: record.claimedAt != null,
+    claimed: allClaimed,
   };
 }
 
@@ -126,7 +133,7 @@ function applyEventToQuest(
   state: StoredQuestState,
   event: QuestEvent,
 ): void {
-  if (state.completed) return;
+  if (state.completed || state.claimed) return;
 
   const pool = getPoolEntry(state.poolId);
 
@@ -256,21 +263,22 @@ export class QuestService implements IQuestService {
       });
     }
 
-    if (!record || record.claimedAt) return;
+    if (!record) return;
 
     const stored = parseStoredQuests(record.quests);
-    let completedCount = record.completed;
+    let completedCount = 0;
 
     for (const state of stored) {
-      if (state.completed) continue;
+      if (state.completed) {
+        completedCount += 1;
+        continue;
+      }
 
       const pool = getPoolEntry(state.poolId);
       if (!eventMatchesQuest(pool.type, event)) continue;
 
-      const wasComplete = state.completed;
       applyEventToQuest(pool.type, state, event);
-
-      if (!wasComplete && state.completed) {
+      if (state.completed) {
         completedCount += 1;
       }
     }
@@ -284,7 +292,7 @@ export class QuestService implements IQuestService {
     });
   }
 
-  async claimReward(key: UserKey): Promise<{ coins: number; xp: number }> {
+  async claimQuestReward(key: UserKey, questId: string): Promise<{ coins: number; xp: number }> {
     const questDate = utcDateKey();
     const record = await prisma.questProgress.findUnique({
       where: {
@@ -300,38 +308,60 @@ export class QuestService implements IQuestService {
       throw new ValidationError('No daily quests found for today.');
     }
 
-    if (record.claimedAt) {
-      throw new AlreadyClaimedError('Quest rewards');
+    const stored = parseStoredQuests(record.quests);
+    const state = stored.find((entry) => entry.poolId === questId);
+    if (!state) {
+      throw new ValidationError('Quest not found on today\'s board.');
     }
 
-    const board = toQuestBoard(record);
-    if (!board.allComplete) {
-      throw new ValidationError('Complete all daily quests before claiming rewards.');
+    if (!state.completed) {
+      throw new ValidationError('Complete this quest before claiming its reward.');
     }
 
-    const baseCoins = board.quests.reduce((sum, q) => sum + q.rewardCoins, 0);
-    const baseXp = board.quests.reduce((sum, q) => sum + q.rewardXp, 0);
+    if (state.claimed) {
+      throw new AlreadyClaimedError('Quest reward');
+    }
+
+    const pool = getPoolEntry(questId);
     const multiplier = 1 + record.streakBonus * questConfig.streakBonusPerDay;
-    const coins = Math.floor(baseCoins * multiplier);
-    const xp = Math.floor(baseXp * multiplier);
+    const coins = Math.floor(pool.rewardCoins * multiplier);
+    const xp = Math.floor(pool.rewardXp * multiplier);
 
-    const updated = await prisma.questProgress.updateMany({
-      where: {
-        id: record.id,
-        claimedAt: null,
-      },
-      data: { claimedAt: new Date() },
+    state.claimed = true;
+    const allClaimed = stored.every((entry) => entry.claimed);
+
+    await prisma.$transaction(async (tx) => {
+      const fresh = await tx.questProgress.findUnique({ where: { id: record.id } });
+      if (!fresh) {
+        throw new ValidationError('No daily quests found for today.');
+      }
+
+      const freshStored = parseStoredQuests(fresh.quests);
+      const freshState = freshStored.find((entry) => entry.poolId === questId);
+      if (!freshState?.completed) {
+        throw new ValidationError('Complete this quest before claiming its reward.');
+      }
+      if (freshState.claimed) {
+        throw new AlreadyClaimedError('Quest reward');
+      }
+
+      freshState.claimed = true;
+      const everyClaimed = freshStored.every((entry) => entry.claimed);
+
+      await tx.questProgress.update({
+        where: { id: record.id },
+        data: {
+          quests: freshStored as unknown as Prisma.InputJsonValue,
+          claimedAt: everyClaimed ? new Date() : fresh.claimedAt,
+        },
+      });
     });
-
-    if (updated.count === 0) {
-      throw new AlreadyClaimedError('Quest rewards');
-    }
 
     if (coins > 0) {
       await economyService.transfer(key, {
         amount: coins,
         source: 'quest',
-        metadata: { questDate, streakBonus: record.streakBonus },
+        metadata: { questDate, questId, streakBonus: record.streakBonus },
       });
     }
 

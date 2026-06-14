@@ -43,7 +43,8 @@ const command: Command = {
         {
           name: 'Jobs (also in /menu)',
           value: [
-            '`/jobs` — list jobs · `/job set` · `/work`',
+            '`/jobs` — list jobs · `/job set` · `/work` · `/focus`',
+            '_Work: pick a task for bonus pay. Focus Shift: 3–5× passive pay if you stay sharp._',
             '_Or use the Jobs tab in `/menu` (all-in-one)._',
           ].join('\n'),
           inline: false,
@@ -76,7 +77,7 @@ const command: Command = {
             `Currency: **${economyConfig.currencyName}**`,
             'Max bet scales with level; bank earns daily interest.',
             'Instant games show a **Play again** button after each round.',
-            'Complete all daily quests for streak bonus rewards.',
+            'Claim each daily quest reward as soon as you finish it.',
             'Admins: `/admin` (Manage Server required).',
           ].join('\n'),
           inline: false,

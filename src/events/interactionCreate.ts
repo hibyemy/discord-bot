@@ -37,8 +37,12 @@ import {
 import adminCommand from '../commands/admin/admin.js';
 import {
   handleQuestClaimButton,
-  QUEST_CLAIM_CUSTOM_ID,
+  isQuestClaimButton,
 } from './components/quests.handler.js';
+import {
+  handleFocusWorkButton,
+  isFocusWorkButton,
+} from './components/focus-work.handler.js';
 
 export function registerInteractionCreateEvent(client: Client): void {
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -56,8 +60,12 @@ export function registerInteractionCreateEvent(client: Client): void {
 
     if (interaction.isButton()) {
       try {
-        if (interaction.customId === QUEST_CLAIM_CUSTOM_ID) {
+        if (isQuestClaimButton(interaction.customId)) {
           await handleQuestClaimButton(interaction);
+          return;
+        }
+        if (isFocusWorkButton(interaction.customId)) {
+          await handleFocusWorkButton(interaction);
           return;
         }
         if (isMenuButton(interaction.customId)) {
