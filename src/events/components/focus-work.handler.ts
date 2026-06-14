@@ -5,7 +5,6 @@ import {
   EmbedBuilder,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
-  type Message,
 } from 'discord.js';
 import {
   buildFocusRoundDeck,
@@ -23,6 +22,8 @@ import { formatCooldown } from '../../utils/cooldowns.js';
 
 const FOCUS_PREFIX = 'focus:';
 
+type FocusReplyInteraction = ChatInputCommandInteraction | ButtonInteraction;
+
 interface FocusSession {
   sessionId: string;
   key: UserKey;
@@ -35,7 +36,7 @@ interface FocusSession {
   gapTimer: ReturnType<typeof setTimeout> | null;
   awaitingInput: boolean;
   resolved: boolean;
-  message: Message | null;
+  replyInteraction: FocusReplyInteraction;
 }
 
 const sessions = new Map<string, FocusSession>();
@@ -143,8 +144,11 @@ async function editSession(
   embed: EmbedBuilder,
   components: ActionRowBuilder<ButtonBuilder>[],
 ): Promise<void> {
-  if (!session.message) return;
-  await session.message.edit({ embeds: [embed], components });
+  try {
+    await session.replyInteraction.editReply({ embeds: [embed], components });
+  } catch (err) {
+    console.error(`Focus session edit failed [${session.sessionId}]:`, err);
+  }
 }
 
 async function finishSession(
@@ -241,12 +245,18 @@ async function presentRound(session: FocusSession): Promise<void> {
     return;
   }
 
-  session.awaitingInput = true;
-  await editSession(
-    session,
-    roundEmbed(session, round, round.prompt),
-    roundChoiceRows(session, round),
-  );
+  try {
+    session.awaitingInput = true;
+    await editSession(
+      session,
+      roundEmbed(session, round, round.prompt),
+      roundChoiceRows(session, round),
+    );
+  } catch (err) {
+    console.error(`Focus round present failed [${session.sessionId}]:`, err);
+    await finishSession(session, 'quit');
+    return;
+  }
 
   session.roundTimer = setTimeout(() => {
     void (async () => {
@@ -286,10 +296,8 @@ async function resolvePick(
     ? `✅ **${round.prompt}** — nailed it!`
     : `❌ **${round.prompt}** — wrong call!`;
 
-  await interaction.update({
-    embeds: [roundEmbed(session, round, status)],
-    components: [disabledRow()],
-  });
+  await interaction.deferUpdate();
+  await editSession(session, roundEmbed(session, round, status), [disabledRow()]);
 
   session.awaitingInput = false;
   session.roundIndex += 1;
@@ -337,7 +345,7 @@ export async function startFocusWorkSession(
       gapTimer: null,
       awaitingInput: false,
       resolved: false,
-      message: null,
+      replyInteraction: interaction,
     };
     sessions.set(sessionId, session);
 
@@ -352,18 +360,18 @@ export async function startFocusWorkSession(
           `Perfect run pays up to **${profile.payoutMultiplier}×** one regular work shift`,
           '',
           '_Catch runs, math snaps, pattern reads, market calls — accuracy sets your final multiplier._',
+          '',
+          '_Starting in a moment…_',
         ].join('\n'),
       );
 
     if (interaction.isChatInputCommand()) {
       await interaction.deferReply({ ephemeral: true });
-      session.message = await interaction.editReply({ embeds: [intro], components: [] });
-    } else if (interaction.deferred || interaction.replied) {
-      session.message = await interaction.editReply({ embeds: [intro], components: [] });
-    } else {
-      await interaction.update({ embeds: [intro], components: [] });
-      session.message = interaction.message;
+    } else if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferUpdate();
     }
+
+    await editSession(session, intro, []);
 
     session.gapTimer = setTimeout(() => {
       void presentRound(session);
@@ -400,8 +408,6 @@ export async function handleFocusWorkButton(interaction: ButtonInteraction): Pro
     });
     return;
   }
-
-  session.message = interaction.message;
 
   if (parsed.action === 'quit') {
     await interaction.deferUpdate();
