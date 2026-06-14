@@ -1,0 +1,18 @@
+services:
+  gamblebot:
+    build: .
+    image: gamblebot:latest
+    container_name: gamblebot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: file:/app/data/prod.db
+      NODE_ENV: production
+    volumes:
+      # For TrueNAS SCALE, prefer a host bind mount, e.g.:
+      # - /mnt/tank/apps/gamblebot/data:/app/data
+      - gamblebot-data:/app/data
+
+volumes:
+  gamblebot-data:
