@@ -7,6 +7,7 @@ import { CRASH_UI_TICK_MS, shouldRefreshCrashDisplay } from '../../utils/crash-l
 import {
   attachCrashMessage,
   buildCrashCashoutId,
+  buildCrashQuitId,
   finalizeCrashSession,
   getCurrentMultiplier,
   hasCrashed,
@@ -137,12 +138,22 @@ const command: Command = {
       time: gameDef.sessionTimeoutMs,
       filter: (i) =>
         i.user.id === interaction.user.id &&
-        i.customId === buildCrashCashoutId(sessionId),
+        (i.customId === buildCrashCashoutId(sessionId) ||
+          i.customId === buildCrashQuitId(sessionId)),
     });
 
     collector.on('collect', async (buttonInteraction) => {
       try {
         await buttonInteraction.deferUpdate();
+        if (buttonInteraction.customId === buildCrashQuitId(sessionId)) {
+          await settle(() =>
+            finalizeCrashSession(key, sessionId, {
+              outcome: 'crash',
+              crashPoint: state.crashPoint,
+            }),
+          );
+          return;
+        }
         const multiplier = getCurrentMultiplier(state);
         await settle(() =>
           finalizeCrashSession(key, sessionId, {
@@ -152,7 +163,7 @@ const command: Command = {
           }),
         );
       } catch (err) {
-        console.error('Crash cash-out error:', err);
+        console.error('Crash button error:', err);
       }
     });
 

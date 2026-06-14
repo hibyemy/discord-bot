@@ -38,6 +38,7 @@ import { CRASH_UI_TICK_MS, shouldRefreshCrashDisplay } from '../../utils/crash-l
 import {
   attachCrashMessage,
   buildCrashCashoutId,
+  buildCrashQuitId,
   finalizeCrashSession,
   getCurrentMultiplier,
   hasCrashed,
@@ -175,6 +176,13 @@ function formatGameLine(
   return `✅ **${game.name}** — ${game.description} · _${edge}_ · ${tag}`;
 }
 
+export function buildQuitToCasinoButton(userId: string): ButtonBuilder {
+  return new ButtonBuilder()
+    .setCustomId(`${PREFIX}quit:${userId}`)
+    .setLabel('Quit')
+    .setStyle(ButtonStyle.Danger);
+}
+
 export function buildMainMenuExitButton(userId: string): ButtonBuilder {
   return new ButtonBuilder()
     .setCustomId(`menu:home:${userId}`)
@@ -303,6 +311,7 @@ function buildBetComponents(
         .setLabel('← Casino hub')
         .setStyle(ButtonStyle.Secondary),
       buildMainMenuExitButton(userId),
+      buildQuitToCasinoButton(userId),
     ),
   );
 
@@ -324,6 +333,7 @@ function buildCoinflipChoiceRow(userId: string, bet: number): ActionRowBuilder<B
       .setLabel('← Casino hub')
       .setStyle(ButtonStyle.Secondary),
     buildMainMenuExitButton(userId),
+    buildQuitToCasinoButton(userId),
   );
 }
 
@@ -349,6 +359,7 @@ function buildRouletteChoiceRows(userId: string, bet: number): ActionRowBuilder<
         .setLabel('← Casino hub')
         .setStyle(ButtonStyle.Secondary),
       buildMainMenuExitButton(userId),
+      buildQuitToCasinoButton(userId),
     ),
   ];
 }
@@ -369,6 +380,7 @@ function buildInteractiveStartRow(
       .setLabel('← Casino hub')
       .setStyle(ButtonStyle.Secondary),
     buildMainMenuExitButton(userId),
+    buildQuitToCasinoButton(userId),
   );
 }
 
@@ -392,7 +404,7 @@ function blackjackActiveEmbed(state: BlackjackState, bet: number): EmbedBuilder 
       },
       { name: 'Bet', value: formatCoins(bet), inline: true },
     )
-    .setFooter({ text: 'Hit, Stand, or Double — 60s to act' });
+    .setFooter({ text: 'Hit, Stand, Double, or Quit — 60s to act' });
 }
 
 function blackjackResultEmbed(
@@ -608,12 +620,24 @@ async function runCrashOnMessage(
 
   const collector = message.createMessageComponentCollector({
     time: gameDef.sessionTimeoutMs,
-    filter: (i) => i.user.id === userId && i.customId === buildCrashCashoutId(sessionId),
+    filter: (i) =>
+      i.user.id === userId &&
+      (i.customId === buildCrashCashoutId(sessionId) ||
+        i.customId === buildCrashQuitId(sessionId)),
   });
 
   collector.on('collect', async (buttonInteraction) => {
     try {
       await buttonInteraction.deferUpdate();
+      if (buttonInteraction.customId === buildCrashQuitId(sessionId)) {
+        await settle(() =>
+          finalizeCrashSession(key, sessionId, {
+            outcome: 'crash',
+            crashPoint: state.crashPoint,
+          }),
+        );
+        return;
+      }
       const multiplier = getCurrentMultiplier(state);
       await settle(() =>
         finalizeCrashSession(key, sessionId, {
@@ -623,7 +647,7 @@ async function runCrashOnMessage(
         }),
       );
     } catch (err) {
-      console.error('Play hub crash cash-out error:', err);
+      console.error('Play hub crash button error:', err);
     }
   });
 
@@ -774,6 +798,13 @@ export async function handlePlayButton(interaction: ButtonInteraction): Promise<
   if (!ctx) return;
 
   try {
+    if (action === 'quit') {
+      await interaction.deferUpdate();
+      const { embed, components } = await buildPlayMenuPayload(ctx.key, ctx.userId);
+      await interaction.editReply({ embeds: [embed], components });
+      return;
+    }
+
     if (action === 'back') {
       await refreshMenu(interaction, ctx);
       return;

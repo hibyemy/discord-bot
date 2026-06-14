@@ -186,6 +186,13 @@ function buildRestartCustomId(game: OneshotGameId, userId: string): string {
   return `${SETUP_PREFIX}restart:${game}:${userId}`;
 }
 
+function buildCasinoQuitButton(userId: string): ButtonBuilder {
+  return new ButtonBuilder()
+    .setCustomId(`play:quit:${userId}`)
+    .setLabel('Quit')
+    .setStyle(ButtonStyle.Danger);
+}
+
 export function buildOneshotResultRows(
   params: ReplayParams,
 ): ActionRowBuilder<ButtonBuilder>[] {
@@ -201,6 +208,7 @@ export function buildOneshotResultRows(
         .setLabel('New game')
         .setStyle(ButtonStyle.Secondary)
         .setEmoji('🎮'),
+      buildCasinoQuitButton(params.userId),
     ),
   ];
 }
@@ -255,6 +263,7 @@ async function buildInlineBetScreen(
         .setCustomId(`${SETUP_PREFIX}custom:${game}:${userId}`)
         .setLabel('Custom bet')
         .setStyle(ButtonStyle.Primary),
+      buildCasinoQuitButton(userId),
     ),
   );
 
@@ -275,6 +284,7 @@ function buildInlineCoinflipChoiceRow(userId: string, bet: number): ActionRowBui
       .setCustomId(`${SETUP_PREFIX}restart:coinflip:${userId}`)
       .setLabel('Change bet')
       .setStyle(ButtonStyle.Secondary),
+    buildCasinoQuitButton(userId),
   );
 }
 
@@ -299,6 +309,7 @@ function buildInlineRouletteChoiceRows(userId: string, bet: number): ActionRowBu
         .setCustomId(`${SETUP_PREFIX}restart:roulette:${userId}`)
         .setLabel('Change bet')
         .setStyle(ButtonStyle.Secondary),
+      buildCasinoQuitButton(userId),
     ),
   ];
 }

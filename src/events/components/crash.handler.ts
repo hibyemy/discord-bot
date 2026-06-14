@@ -9,10 +9,12 @@ import { ValidationError } from '../../contracts/errors.js';
 import type { UserKey } from '../../contracts/services.js';
 import {
   buildCrashCashoutId,
+  buildCrashQuitId,
   finalizeCrashSession,
   getCurrentMultiplier,
   loadCrashSession,
   parseCrashCashoutId,
+  parseCrashQuitId,
   tryAutoCrash,
   type CrashDetails,
 } from '../../services/games/crash.game.js';
@@ -22,7 +24,7 @@ import { embedColors, formatCoins } from '../../utils/embeds.js';
 import type { GameFlowResult } from '../../services/games/base.game.js';
 
 export function isCrashButton(customId: string): boolean {
-  return parseCrashCashoutId(customId) !== null;
+  return parseCrashCashoutId(customId) !== null || parseCrashQuitId(customId) !== null;
 }
 
 function userKeyFromInteraction(interaction: ButtonInteraction): UserKey {
@@ -111,11 +113,17 @@ export function buildCrashActiveRow(sessionId: string, disabled = false): Action
       .setLabel('Cash out')
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(buildCrashQuitId(sessionId))
+      .setLabel('Quit')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled),
   );
 }
 
 export async function handleCrashButton(interaction: ButtonInteraction): Promise<boolean> {
-  const sessionId = parseCrashCashoutId(interaction.customId);
+  const quitSessionId = parseCrashQuitId(interaction.customId);
+  const sessionId = quitSessionId ?? parseCrashCashoutId(interaction.customId);
   if (!sessionId) {
     return false;
   }
@@ -123,6 +131,19 @@ export async function handleCrashButton(interaction: ButtonInteraction): Promise
   const key = userKeyFromInteraction(interaction);
 
   await interaction.deferUpdate();
+
+  if (quitSessionId) {
+    const { state } = await loadCrashSession(sessionId, key);
+    const result = await finalizeCrashSession(key, sessionId, {
+      outcome: 'crash',
+      crashPoint: state.crashPoint,
+    });
+    await interaction.editReply({
+      embeds: [buildResultEmbed(result).setTitle('Crash — Quit (bet lost)')],
+      components: [],
+    });
+    return true;
+  }
 
   const autoResult = await tryAutoCrash(key, sessionId);
   if (autoResult) {

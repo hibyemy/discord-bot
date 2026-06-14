@@ -451,6 +451,38 @@ export async function doubleBlackjack(
   return { state, result };
 }
 
+export async function forfeitBlackjack(
+  sessionId: string,
+  key: UserKey,
+): Promise<{ state: BlackjackState; bet: number; result: GameFlowResult<BlackjackDetails> }> {
+  const { session, state } = await getBlackjackSession(sessionId, key);
+  state.finished = true;
+  state.dealerRevealed = true;
+
+  const result = await runGameFlow<null, BlackjackDetails>({
+    key,
+    gameType: GAME_TYPE,
+    bet: session.bet,
+    betAlreadyDeducted: true,
+    input: null,
+    resolve: async () => ({
+      won: false,
+      payout: 0,
+      details: {
+        outcome: 'lose',
+        playerHand: state.playerHand,
+        dealerHand: state.dealerHand,
+        playerValue: handValue(state.playerHand),
+        dealerValue: handValue(state.dealerHand),
+        doubled: state.doubled,
+      },
+    }),
+  });
+
+  await prisma.gameSession.delete({ where: { id: session.id } });
+  return { state, bet: session.bet, result };
+}
+
 export function buildBlackjackButtons(
   sessionId: string,
   canDouble: boolean,
@@ -475,19 +507,29 @@ export function buildBlackjackButtons(
     );
   }
 
-  return [row];
+  const quitRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${BLACKJACK_BUTTON_PREFIX}:quit:${sessionId}`)
+      .setLabel('Quit (forfeit)')
+      .setStyle(ButtonStyle.Danger),
+  );
+
+  return [row, quitRow];
 }
 
 export function parseBlackjackCustomId(
   customId: string,
-): { action: 'hit' | 'stand' | 'double'; sessionId: string } | null {
+): { action: 'hit' | 'stand' | 'double' | 'quit'; sessionId: string } | null {
   const parts = customId.split(':');
   if (parts.length !== 3 || parts[0] !== BLACKJACK_BUTTON_PREFIX) {
     return null;
   }
   const action = parts[1];
   const sessionId = parts[2];
-  if (!sessionId || (action !== 'hit' && action !== 'stand' && action !== 'double')) {
+  if (
+    !sessionId ||
+    (action !== 'hit' && action !== 'stand' && action !== 'double' && action !== 'quit')
+  ) {
     return null;
   }
   return { action, sessionId };

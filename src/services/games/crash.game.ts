@@ -35,9 +35,14 @@ export type CrashFinalizeInput = {
 };
 
 export const CRASH_CASHOUT_PREFIX = 'crash:cashout:';
+export const CRASH_QUIT_PREFIX = 'crash:quit:';
 
 export function buildCrashCashoutId(sessionId: string): string {
   return `${CRASH_CASHOUT_PREFIX}${sessionId}`;
+}
+
+export function buildCrashQuitId(sessionId: string): string {
+  return `${CRASH_QUIT_PREFIX}${sessionId}`;
 }
 
 export function parseCrashCashoutId(customId: string): string | null {
@@ -45,6 +50,14 @@ export function parseCrashCashoutId(customId: string): string | null {
     return null;
   }
   const sessionId = customId.slice(CRASH_CASHOUT_PREFIX.length);
+  return sessionId.length > 0 ? sessionId : null;
+}
+
+export function parseCrashQuitId(customId: string): string | null {
+  if (!customId.startsWith(CRASH_QUIT_PREFIX)) {
+    return null;
+  }
+  const sessionId = customId.slice(CRASH_QUIT_PREFIX.length);
   return sessionId.length > 0 ? sessionId : null;
 }
 

@@ -7,6 +7,7 @@ import type { UserKey } from '../../contracts/services.js';
 import {
   buildBlackjackButtons,
   doubleBlackjack,
+  forfeitBlackjack,
   hitBlackjack,
   outcomeLabel,
   parseBlackjackCustomId,
@@ -80,7 +81,7 @@ function activeHandEmbed(
         inline: true,
       },
     )
-    .setFooter({ text: 'Hit, Stand, or Double — 60s to act' });
+    .setFooter({ text: 'Hit, Stand, Double, or Quit to forfeit — 60s to act' });
 }
 
 function resultEmbed(
@@ -156,6 +157,27 @@ export async function handleBlackjackButton(interaction: ButtonInteraction): Pro
   const key = interactionKey(interaction);
 
   try {
+    if (parsed.action === 'quit') {
+      const { state, result } = await forfeitBlackjack(parsed.sessionId, key);
+      if (!result.details) {
+        throw new Error('Blackjack forfeit missing details.');
+      }
+      await interaction.update({
+        embeds: [
+          resultEmbed(
+            state,
+            result.bet,
+            result.details,
+            result.payout,
+            result.profit,
+            result.xpAwarded,
+          ).setTitle('Blackjack — Forfeited'),
+        ],
+        components: [],
+      });
+      return;
+    }
+
     if (parsed.action === 'hit') {
       const { state, bet, result } = await hitBlackjack(parsed.sessionId, key);
       if (result?.details) {
