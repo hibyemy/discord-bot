@@ -8,6 +8,10 @@ import {
   isBlackjackButton,
 } from './components/blackjack.handler.js';
 import { handleCrashButton, isCrashButton } from './components/crash.handler.js';
+import {
+  handleOneshotReplayButton,
+  isOneshotReplayButton,
+} from './components/oneshot-replay.handler.js';
 import adminCommand from '../commands/admin/admin.js';
 import {
   handleQuestClaimButton,
@@ -40,6 +44,10 @@ export function registerInteractionCreateEvent(client: Client): void {
         }
         if (isCrashButton(interaction.customId)) {
           await handleCrashButton(interaction);
+          return;
+        }
+        if (isOneshotReplayButton(interaction.customId)) {
+          await handleOneshotReplayButton(interaction);
           return;
         }
         if (interaction.customId.startsWith('admin:reset:confirm:')) {

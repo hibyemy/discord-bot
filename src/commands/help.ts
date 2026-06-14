@@ -65,6 +65,7 @@ const command: Command = {
           value: [
             `Currency: **${economyConfig.currencyName}**`,
             'Max bet scales with level; bank earns daily interest.',
+            'Instant games show a **Play again** button after each round.',
             'Complete all daily quests for streak bonus rewards.',
             'Admins: `/admin` (Manage Server required).',
           ].join('\n'),

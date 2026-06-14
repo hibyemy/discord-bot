@@ -1,18 +1,13 @@
-import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { ValidationError } from '../../contracts/errors.js';
 import { getGame } from '../../config/games.js';
+import { buildOneshotReply } from '../../events/components/oneshot-replay.handler.js';
 import { guildConfigService, progressionService } from '../../services/index.js';
 import { playCoinflip } from '../../services/games/coinflip.game.js';
-import { embedColors, formatCoins } from '../../utils/embeds.js';
 import type { Command } from '../types.js';
 import { userKey } from '../economy/helpers.js';
 
 const gameDef = getGame('coinflip')!;
-
-const choiceLabel: Record<'heads' | 'tails', string> = {
-  heads: 'Heads',
-  tails: 'Tails',
-};
 
 const command: Command = {
   data: new SlashCommandBuilder()
@@ -49,30 +44,14 @@ const command: Command = {
     }
 
     const result = await playCoinflip(key, bet, choice);
-    const details = result.details!;
+    const { embed, components } = buildOneshotReply(
+      'coinflip',
+      interaction.user.id,
+      bet,
+      result,
+    );
 
-    const embed = new EmbedBuilder()
-      .setColor(result.won ? embedColors.success : embedColors.error)
-      .setTitle(result.won ? 'Coinflip — You won!' : 'Coinflip — You lost')
-      .addFields(
-        { name: 'Your pick', value: choiceLabel[details.choice], inline: true },
-        { name: 'Result', value: choiceLabel[details.flip], inline: true },
-        { name: 'Bet', value: formatCoins(result.bet), inline: true },
-        {
-          name: 'Payout',
-          value: result.won ? formatCoins(result.payout) : '—',
-          inline: true,
-        },
-        {
-          name: 'Profit',
-          value: `${result.profit >= 0 ? '+' : ''}${formatCoins(result.profit)}`,
-          inline: true,
-        },
-        { name: 'XP', value: `+${result.xpAwarded}`, inline: true },
-      )
-      .setFooter({ text: `Wallet: ${formatCoins(Number(result.user.wallet))}` });
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed], components });
   },
 };
 
