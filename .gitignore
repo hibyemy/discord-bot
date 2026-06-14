@@ -11,3 +11,7 @@ docker-compose.override.yml
 Thumbs.db
 *.log
 .prisma/
+
+# Local agent / IDE workflow files (not part of the published bot)
+AGENTS.md
+.cursor/

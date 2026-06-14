@@ -3,6 +3,7 @@ import { ValidationError } from '../../contracts/errors.js';
 import { getGame } from '../../config/games.js';
 import { guildConfigService, progressionService } from '../../services/index.js';
 import type { GameFlowResult } from '../../services/games/base.game.js';
+import { CRASH_UI_TICK_MS, shouldRefreshCrashDisplay } from '../../utils/crash-live-ui.js';
 import {
   attachCrashMessage,
   buildCrashCashoutId,
@@ -60,6 +61,7 @@ const command: Command = {
     await attachCrashMessage(sessionId, key, reply.id, reply.channelId);
 
     let settled = false;
+    let lastDisplaySnapshot: string | null = null;
 
     const settle = async (
       finalize: () => Promise<GameFlowResult<CrashDetails>>,
@@ -114,6 +116,14 @@ const command: Command = {
           return;
         }
 
+        const { refresh, snapshot } = shouldRefreshCrashDisplay(
+          lastDisplaySnapshot,
+          multiplier,
+          remainingMs,
+        );
+        if (!refresh) return;
+        lastDisplaySnapshot = snapshot;
+
         await interaction.editReply({
           embeds: [buildCrashActiveEmbed(bet, multiplier, remainingMs)],
           components: [buildCrashActiveRow(sessionId)],
@@ -121,7 +131,7 @@ const command: Command = {
       } catch (err) {
         console.error('Crash tick error:', err);
       }
-    }, 1_500);
+    }, CRASH_UI_TICK_MS);
 
     const collector = reply.createMessageComponentCollector({
       time: gameDef.sessionTimeoutMs,

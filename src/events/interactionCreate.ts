@@ -10,7 +10,11 @@ import {
 import { handleCrashButton, isCrashButton } from './components/crash.handler.js';
 import {
   handleOneshotReplayButton,
+  handleOneshotSetupButton,
+  handleOneshotSetupModal,
   isOneshotReplayButton,
+  isOneshotSetupButton,
+  isOneshotSetupModal,
 } from './components/oneshot-replay.handler.js';
 import {
   handleMenuButton,
@@ -70,6 +74,10 @@ export function registerInteractionCreateEvent(client: Client): void {
         }
         if (isCrashButton(interaction.customId)) {
           await handleCrashButton(interaction);
+          return;
+        }
+        if (isOneshotSetupButton(interaction.customId)) {
+          await handleOneshotSetupButton(interaction);
           return;
         }
         if (isOneshotReplayButton(interaction.customId)) {
@@ -139,6 +147,10 @@ export function registerInteractionCreateEvent(client: Client): void {
 
     if (interaction.isModalSubmit()) {
       try {
+        if (isOneshotSetupModal(interaction.customId)) {
+          await handleOneshotSetupModal(interaction);
+          return;
+        }
         if (isMenuModal(interaction.customId)) {
           await handleMenuModal(interaction);
           return;

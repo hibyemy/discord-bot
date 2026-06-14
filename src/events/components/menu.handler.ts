@@ -10,7 +10,6 @@ import {
   TextInputStyle,
   UserSelectMenuBuilder,
   type ButtonInteraction,
-  type Client,
   type MessageComponentInteraction,
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
@@ -41,6 +40,8 @@ import {
 import { embedColors, errorEmbed, formatCoins, infoEmbed, profileEmbed } from '../../utils/embeds.js';
 import { formatCooldown } from '../../utils/cooldowns.js';
 import { dailyResetLine } from '../../utils/daily-reset.js';
+import { buildHubProgressLine } from '../../utils/progression-display.js';
+import { resolveMemberLabel } from '../../utils/member-label-cache.js';
 import {
   fetchLeaderboard,
   formatLeaderboardLines,
@@ -149,22 +150,6 @@ function backToProgressionButton(userId: string): ButtonBuilder {
     .setStyle(ButtonStyle.Secondary);
 }
 
-async function resolveDisplayName(
-  client: Client,
-  guildId: string,
-  discordId: string,
-): Promise<string> {
-  try {
-    const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId));
-    const member = await guild.members.fetch(discordId).catch(() => null);
-    if (member) return member.displayName;
-    const user = await client.users.fetch(discordId);
-    return user.displayName;
-  } catch {
-    return discordId;
-  }
-}
-
 function formatTransaction(tx: Transaction): string {
   const sign = tx.amount >= 0 ? '+' : '';
   const when = `<t:${Math.floor(tx.createdAt.getTime() / 1000)}:R>`;
@@ -202,11 +187,11 @@ export async function buildMainMenuPayload(key: UserKey, userId: string) {
     .setTitle('🏠 Gamblebot Hub')
     .setDescription(
       [
-        `**Wallet:** ${formatCoins(balance.wallet)} · **Bank:** ${formatCoins(balance.bank)} · **Level:** ${level}`,
+        `**Wallet:** ${formatCoins(balance.wallet)} · **Bank:** ${formatCoins(balance.bank)}`,
+        buildHubProgressLine(level),
         dailyResetLine(),
         '',
         'Choose a category below. This menu is **private** — only you see it.',
-        'Individual slash commands still work if you prefer them.',
         '',
         '💰 **Economy** — balance, daily, bank, pay',
         '💼 **Jobs** — pick a job & work shifts',
@@ -495,14 +480,7 @@ async function showCategory(
     }
     case 'games': {
       const payload = await buildPlayMenuPayload(ctx.key, ctx.userId);
-      const embed = EmbedBuilder.from(payload.embed).setFooter({
-        text: 'Casino hub · Back returns to main menu',
-      });
-      const components = [
-        ...payload.components,
-        new ActionRowBuilder<ButtonBuilder>().addComponents(backButton(ctx.userId)),
-      ];
-      const options = { embeds: [embed], components };
+      const options = toMessageOptions(payload);
       if (editReply) {
         await interaction.editReply(options);
       } else {
@@ -573,19 +551,10 @@ export async function openGamesMenu(interaction: {
 
   const key: UserKey = { discordId: interaction.user.id, guildId: interaction.guildId };
   const payload = await buildPlayMenuPayload(key, interaction.user.id);
-  const components = [
-    ...payload.components,
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${PREFIX}home:${interaction.user.id}`)
-        .setLabel('Main menu')
-        .setStyle(ButtonStyle.Secondary),
-    ),
-  ];
 
   await interaction.reply({
     embeds: [payload.embed],
-    components,
+    components: payload.components,
     ephemeral: true,
   });
 }
@@ -645,7 +614,7 @@ export async function handleMenuSelect(interaction: StringSelectMenuInteraction)
       rows.map(async (row) => {
         names.set(
           row.discordId,
-          await resolveDisplayName(interaction.client, ctx.guildId, row.discordId),
+          await resolveMemberLabel(interaction.client, ctx.guildId, row.discordId),
         );
       }),
     );

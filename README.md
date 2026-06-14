@@ -1,6 +1,13 @@
 # Gamblebot
 
-Progressive fake-currency Discord economy bot built with Node.js, TypeScript, discord.js v14, Prisma, and SQLite.
+Progressive **fake-currency** Discord economy bot built with Node.js, TypeScript, discord.js v14, Prisma, and SQLite.
+
+> **Important:** This bot uses fictional in-server coins with no real-world value. It is **not** intended for commercial use or for building real-money gambling services. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+## License
+
+- [PolyForm Noncommercial License 1.0.0](LICENSE) — personal, hobby, and noncommercial use only
+- [NOTICE](NOTICE) — prohibited uses (real-money gambling, commercial deployment without permission)
 
 ## Requirements
 
@@ -67,7 +74,8 @@ Progressive fake-currency Discord economy bot built with Node.js, TypeScript, di
 
 - **Economy** — wallet, bank, daily rewards, deposits, P2P transfers
 - **Jobs** — tiered jobs unlocked by level with cooldowns
-- **Games** — coinflip, dice, slots, roulette, blackjack, crash
+- **Games** — coinflip, dice, slots, roulette, blackjack, crash (with play-again / new game)
+- **Menu hub** — `/menu` for economy, jobs, casino, shop, and progression
 - **Shop** — permanent upgrades (payout, cooldown, bank interest, etc.)
 - **Quests** — 3 daily quests with streak bonuses (resets midnight UTC)
 - **Achievements** — one-time milestones with coin/XP rewards
@@ -94,3 +102,12 @@ On bot ready, the scheduler runs:
 npx tsc --noEmit
 npm run build
 ```
+
+## API usage notes
+
+The bot is designed to avoid unnecessary Discord traffic:
+
+- **Crash** updates the live embed at most every ~2.5s and skips edits when the displayed multiplier/timer bucket is unchanged
+- **Leaderboards & announcements** cache member display names for 5 minutes
+- **Cron jobs** run twice daily (midnight UTC) — not continuous polling
+- **Menus** only call the Discord API on user interaction (no background refresh loops)

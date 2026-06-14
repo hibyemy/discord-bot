@@ -34,6 +34,7 @@ import { playCoinflip } from '../../services/games/coinflip.game.js';
 import { playDice } from '../../services/games/dice.game.js';
 import { playRoulette, type RouletteBetType } from '../../services/games/roulette.game.js';
 import { playSlots } from '../../services/games/slots.game.js';
+import { CRASH_UI_TICK_MS, shouldRefreshCrashDisplay } from '../../utils/crash-live-ui.js';
 import {
   attachCrashMessage,
   buildCrashCashoutId,
@@ -55,6 +56,7 @@ import {
   progressionService,
 } from '../../services/index.js';
 import { embedColors, errorEmbed, formatCoins } from '../../utils/embeds.js';
+import { buildCasinoProgressBlock } from '../../utils/progression-display.js';
 import { buildOneshotReply } from './oneshot-replay.handler.js';
 
 const PREFIX = 'play:';
@@ -143,14 +145,19 @@ async function getPlayContext(
 async function gameAvailability(
   key: UserKey,
   game: GameDefinition,
+  level: number,
 ): Promise<{ playable: boolean; reason?: string }> {
   if (await guildConfigService.isGameDisabled(key.guildId, game.id)) {
     return { playable: false, reason: 'Disabled on this server' };
   }
 
-  const level = await progressionService.getLevel(key);
   if (level < game.unlockLevel) {
-    return { playable: false, reason: `Unlocks at level ${game.unlockLevel}` };
+    const away = game.unlockLevel - level;
+    const reason =
+      away === 1
+        ? 'Unlocks next level'
+        : `Unlocks at level ${game.unlockLevel} (${away} away)`;
+    return { playable: false, reason };
   }
 
   return { playable: true };
@@ -162,26 +169,36 @@ function formatGameLine(
 ): string {
   const edge = `${(game.houseEdge * 100).toFixed(1)}% edge`;
   if (!status.playable) {
-    return `🔒 **${game.name}** (Lv ${game.unlockLevel}) — ${status.reason ?? 'Locked'}`;
+    return `🔒 **${game.name}** — ${status.reason ?? 'Locked'}`;
   }
-  const tag = game.interactive ? 'Interactive' : 'Instant';
-  return `✅ **${game.name}** (Lv ${game.unlockLevel}) — ${game.description} · ${edge} · ${tag}`;
+  const tag = game.interactive ? '🎮 Live' : '⚡ Instant';
+  return `✅ **${game.name}** — ${game.description} · _${edge}_ · ${tag}`;
+}
+
+export function buildMainMenuExitButton(userId: string): ButtonBuilder {
+  return new ButtonBuilder()
+    .setCustomId(`menu:home:${userId}`)
+    .setLabel('← Main menu')
+    .setStyle(ButtonStyle.Secondary);
 }
 
 export async function buildPlayMenuPayload(key: UserKey, userId: string) {
-  const [balance, level] = await Promise.all([
+  const [balance, level, xp, maxBetValidation] = await Promise.all([
     economyService.getBalance(key),
     progressionService.getLevel(key),
+    progressionService.xpProgress(key),
+    economyService.validateBet(key, economyConfig.minBet),
   ]);
-  const maxBet = (await economyService.validateBet(key, economyConfig.minBet)).maxBet;
+  const maxBet = maxBetValidation.maxBet;
 
-  const lines: string[] = [];
+  const availableLines: string[] = [];
+  const lockedLines: string[] = [];
   const selectOptions: StringSelectMenuOptionBuilder[] = [];
 
   for (const game of gamesConfig.games) {
-    const status = await gameAvailability(key, game);
-    lines.push(formatGameLine(game, status));
+    const status = await gameAvailability(key, game, level);
     if (status.playable) {
+      availableLines.push(formatGameLine(game, status));
       selectOptions.push(
         new StringSelectMenuOptionBuilder()
           .setLabel(game.name)
@@ -189,23 +206,32 @@ export async function buildPlayMenuPayload(key: UserKey, userId: string) {
           .setValue(game.id)
           .setEmoji(game.interactive ? '🎮' : '🎰'),
       );
+    } else {
+      lockedLines.push(formatGameLine(game, status));
     }
   }
+
+  const progressBlock = buildCasinoProgressBlock(level, xp, maxBet);
 
   const embed = new EmbedBuilder()
     .setColor(embedColors.game)
     .setTitle('🎰 Casino Hub')
     .setDescription(
       [
+        ...progressBlock,
+        '',
         `**Wallet:** ${formatCoins(balance.wallet)}`,
-        `**Max bet:** ${formatCoins(maxBet)} · **Level:** ${level}`,
         '',
-        'Pick a game below. This menu is private — only game results appear in chat.',
+        '_Results post publicly — this menu stays private._',
         '',
-        lines.join('\n'),
+        '**Play now**',
+        availableLines.length > 0 ? availableLines.join('\n') : '_No games available yet — level up!_',
+        ...(lockedLines.length > 0
+          ? ['', '**Unlocks ahead**', lockedLines.join('\n')]
+          : []),
       ].join('\n'),
     )
-    .setFooter({ text: 'Use the dropdown to choose a game' });
+    .setFooter({ text: 'Pick a game below · Rank titles cap at level 100' });
 
   const components: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [];
 
@@ -219,6 +245,10 @@ export async function buildPlayMenuPayload(key: UserKey, userId: string) {
       ),
     );
   }
+
+  components.push(
+    new ActionRowBuilder<ButtonBuilder>().addComponents(buildMainMenuExitButton(userId)),
+  );
 
   return { embed, components };
 }
@@ -270,8 +300,9 @@ function buildBetComponents(
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId(`${PREFIX}back:${userId}`)
-        .setLabel('Back to menu')
+        .setLabel('← Casino hub')
         .setStyle(ButtonStyle.Secondary),
+      buildMainMenuExitButton(userId),
     ),
   );
 
@@ -290,8 +321,9 @@ function buildCoinflipChoiceRow(userId: string, bet: number): ActionRowBuilder<B
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`${PREFIX}back:${userId}`)
-      .setLabel('Back')
+      .setLabel('← Casino hub')
       .setStyle(ButtonStyle.Secondary),
+    buildMainMenuExitButton(userId),
   );
 }
 
@@ -314,8 +346,9 @@ function buildRouletteChoiceRows(userId: string, bet: number): ActionRowBuilder<
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`${PREFIX}back:${userId}`)
-        .setLabel('Back')
+        .setLabel('← Casino hub')
         .setStyle(ButtonStyle.Secondary),
+      buildMainMenuExitButton(userId),
     ),
   ];
 }
@@ -333,8 +366,9 @@ function buildInteractiveStartRow(
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`${PREFIX}back:${userId}`)
-      .setLabel('Back')
+      .setLabel('← Casino hub')
       .setStyle(ButtonStyle.Secondary),
+    buildMainMenuExitButton(userId),
   );
 }
 
@@ -403,7 +437,11 @@ function blackjackResultEmbed(
 
 async function refreshMenu(interaction: MessageComponentInteraction, ctx: PlayContext): Promise<void> {
   const { embed, components } = await buildPlayMenuPayload(ctx.key, ctx.userId);
-  await interaction.update({ embeds: [embed], components });
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({ embeds: [embed], components });
+  } else {
+    await interaction.update({ embeds: [embed], components });
+  }
 }
 
 async function showBetScreen(
@@ -416,7 +454,8 @@ async function showBetScreen(
     throw new ValidationError('Unknown game.');
   }
 
-  const status = await gameAvailability(ctx.key, game);
+  const level = await progressionService.getLevel(ctx.key);
+  const status = await gameAvailability(ctx.key, game, level);
   if (!status.playable) {
     throw new ValidationError(status.reason ?? 'This game is not available.');
   }
@@ -503,6 +542,7 @@ async function runCrashOnMessage(
   const expiresAt = Date.now() + gameDef.sessionTimeoutMs;
 
   let settled = false;
+  let lastDisplaySnapshot: string | null = null;
 
   const settle = async (
     finalize: () => Promise<GameFlowResult<CrashDetails>>,
@@ -548,14 +588,23 @@ async function runCrashOnMessage(
         return;
       }
 
+      const multiplier = getCurrentMultiplier(state);
+      const { refresh, snapshot } = shouldRefreshCrashDisplay(
+        lastDisplaySnapshot,
+        multiplier,
+        remainingMs,
+      );
+      if (!refresh) return;
+      lastDisplaySnapshot = snapshot;
+
       await message.edit({
-        embeds: [buildCrashActiveEmbed(bet, getCurrentMultiplier(state), remainingMs)],
+        embeds: [buildCrashActiveEmbed(bet, multiplier, remainingMs)],
         components: [buildCrashActiveRow(sessionId)],
       });
     } catch (err) {
       console.error('Play hub crash tick error:', err);
     }
-  }, 1_500);
+  }, CRASH_UI_TICK_MS);
 
   const collector = message.createMessageComponentCollector({
     time: gameDef.sessionTimeoutMs,

@@ -2,6 +2,7 @@
   "name": "gamblebot",
   "version": "0.1.0",
   "description": "Progressive fake-currency Discord economy bot",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

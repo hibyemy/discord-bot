@@ -1,5 +1,4 @@
 import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
-import type { Client } from 'discord.js';
 import { guildConfigService } from '../../services/index.js';
 import { embedColors } from '../../utils/embeds.js';
 import {
@@ -9,24 +8,8 @@ import {
   TYPE_META,
   type LeaderboardType,
 } from '../../utils/rankings.js';
+import { resolveMemberLabel } from '../../utils/member-label-cache.js';
 import type { Command } from '../types.js';
-
-async function resolveDisplayName(
-  client: Client,
-  guildId: string,
-  discordId: string,
-): Promise<string> {
-  try {
-    const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId));
-    const member = await guild.members.fetch(discordId).catch(() => null);
-    if (member) return member.displayName;
-
-    const user = await client.users.fetch(discordId);
-    return user.displayName;
-  } catch {
-    return `Unknown (${discordId})`;
-  }
-}
 
 const command: Command = {
   data: new SlashCommandBuilder()
@@ -67,7 +50,7 @@ const command: Command = {
       rows.map(async (row) => {
         names.set(
           row.discordId,
-          await resolveDisplayName(interaction.client, interaction.guildId!, row.discordId),
+          await resolveMemberLabel(interaction.client, interaction.guildId!, row.discordId),
         );
       }),
     );

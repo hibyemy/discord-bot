@@ -5,6 +5,7 @@ import {
 } from 'discord.js';
 import { guildConfigService } from '../services/index.js';
 import { embedColors, formatCoins } from './embeds.js';
+import { resolveMemberMention } from './member-label-cache.js';
 
 /** Minimum single-win profit to post a public announcement. */
 export const ANNOUNCE_BIG_WIN_MIN_PROFIT = 5_000;
@@ -31,23 +32,6 @@ async function getAnnounceChannel(
   return channel as GuildTextBasedChannel;
 }
 
-async function resolveUserLabel(
-  client: Client,
-  guildId: string,
-  discordId: string,
-): Promise<string> {
-  try {
-    const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId));
-    const member = await guild.members.fetch(discordId).catch(() => null);
-    if (member) return member.toString();
-
-    const user = await client.users.fetch(discordId);
-    return user.toString();
-  } catch {
-    return `<@${discordId}>`;
-  }
-}
-
 export async function announceBigWin(
   client: Client,
   guildId: string,
@@ -62,7 +46,7 @@ export async function announceBigWin(
   const channel = await getAnnounceChannel(client, guildId);
   if (!channel) return false;
 
-  const userLabel = await resolveUserLabel(client, guildId, discordId);
+  const userLabel = await resolveMemberMention(client, guildId, discordId);
   const embed = new EmbedBuilder()
     .setColor(embedColors.game)
     .setTitle('Big Win!')
@@ -90,7 +74,7 @@ export async function announceLevelUp(
   const channel = await getAnnounceChannel(client, guildId);
   if (!channel) return false;
 
-  const userLabel = await resolveUserLabel(client, guildId, discordId);
+  const userLabel = await resolveMemberMention(client, guildId, discordId);
   const embed = new EmbedBuilder()
     .setColor(embedColors.success)
     .setTitle('Level Up!')

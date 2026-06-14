@@ -20,16 +20,18 @@ export const economyConfig = {
   maxBetAbsolute: 500_000,
   minBet: 1,
 
-  /** Level formula: xpToNext = 100 * level^1.5 */
-  xpBase: 100,
-  xpExponent: 1.5,
+  /** Level formula — quick early levels, steep curve after 25 for long-term mastery */
+  xpBase: 50,
+  xpExponentEarly: 1.36,
+  xpLateLevelStart: 25,
+  xpLateExponent: 1.72,
 
   /** Bank interest cron (daily) */
   bankInterestBaseRate: 0.01,
 
   /** Participation XP for games */
-  gameXpWin: 15,
-  gameXpLoss: 5,
+  gameXpWin: 20,
+  gameXpLoss: 8,
 
   /** Shop tier unlock levels */
   shopTierUnlocks: {
@@ -40,7 +42,14 @@ export const economyConfig = {
 } as const;
 
 export function xpToNextLevel(level: number): number {
-  return Math.floor(economyConfig.xpBase * Math.pow(level, economyConfig.xpExponent));
+  const { xpBase, xpExponentEarly, xpLateLevelStart, xpLateExponent } = economyConfig;
+
+  if (level < xpLateLevelStart) {
+    return Math.floor(xpBase * Math.pow(level, xpExponentEarly));
+  }
+
+  const anchor = Math.floor(xpBase * Math.pow(xpLateLevelStart - 1, xpExponentEarly));
+  return Math.floor(anchor * Math.pow(level / (xpLateLevelStart - 1), xpLateExponent));
 }
 
 export function maxBetForLevel(level: number, bonusMultiplier = 1): number {
