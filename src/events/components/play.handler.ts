@@ -717,13 +717,12 @@ export async function handlePlaySelect(interaction: StringSelectMenuInteraction)
 
 export async function handlePlayButton(interaction: ButtonInteraction): Promise<void> {
   const parts = interaction.customId.split(':');
-  const userId = parts[1];
-  if (!userId) return;
+  const action = parts[1];
+  const userId = parts[2];
+  if (!action || !userId) return;
 
   const ctx = await getPlayContext(interaction, userId);
   if (!ctx) return;
-
-  const action = parts[2];
 
   try {
     if (action === 'back') {
