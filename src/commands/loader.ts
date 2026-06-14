@@ -6,6 +6,13 @@ import type { Command, CommandModule } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+function isCommandModuleFile(file: string): boolean {
+  if (file.endsWith('.d.ts') || file.endsWith('.js.map')) {
+    return false;
+  }
+  return file.endsWith('.js') || file.endsWith('.ts');
+}
+
 async function loadCommandFile(
   filePath: string,
   commands: Map<string, Command>,
@@ -35,12 +42,12 @@ export async function loadCommands(
       const subdir = join(commandsDir, entry.name);
       const files = await readdir(subdir);
       for (const file of files) {
-        if (file.endsWith('.ts') || file.endsWith('.js')) {
+        if (isCommandModuleFile(file)) {
           await loadCommandFile(join(subdir, file), commands);
         }
       }
     } else if (
-      (entry.name.endsWith('.ts') || entry.name.endsWith('.js')) &&
+      isCommandModuleFile(entry.name) &&
       entry.name !== 'loader.ts' &&
       entry.name !== 'loader.js' &&
       entry.name !== 'types.ts' &&
