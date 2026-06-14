@@ -42,6 +42,7 @@ export class EconomyService implements IEconomyService {
         bank: economyConfig.startingBank,
         level: economyConfig.startingLevel,
         xp: economyConfig.startingXp,
+        cooldowns: {},
       },
       update: {},
     });
@@ -254,6 +255,7 @@ export class EconomyService implements IEconomyService {
         bank: economyConfig.startingBank,
         level: economyConfig.startingLevel,
         xp: economyConfig.startingXp,
+        cooldowns: {},
       },
       update: {},
     });

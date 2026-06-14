@@ -22,6 +22,7 @@ export class ProgressionService implements IProgressionService {
         bank: economyConfig.startingBank,
         level: economyConfig.startingLevel,
         xp: economyConfig.startingXp,
+        cooldowns: {},
       },
       update: {},
     });

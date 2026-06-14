@@ -18,7 +18,7 @@ model User {
   dailyStreak Int       @default(0)
   lastDaily   DateTime?
   lastWork    DateTime?
-  cooldowns   Json      @default("{}")
+  cooldowns   Json
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -130,8 +130,8 @@ model Achievement {
 model GuildConfig {
   guildId              String   @id
   dailyBonusMultiplier Float    @default(1.0)
-  disabledGames        Json     @default("[]")
-  disabledCommands     Json     @default("[]")
+  disabledGames        Json
+  disabledCommands     Json
   transferTaxOverride  Float?
   announceChannelId    String?
   welcomeBonus         Int      @default(0)
