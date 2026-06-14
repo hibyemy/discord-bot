@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  discordId   String
+  guildId     String
+  wallet      Int       @default(0)
+  bank        Int       @default(0)
+  xp          Int       @default(0)
+  level       Int       @default(1)
+  activeJob   String?
+  dailyStreak Int       @default(0)
+  lastDaily   DateTime?
+  lastWork    DateTime?
+  cooldowns   Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  transactions Transaction[]
+  upgrades     UserUpgrade[]
+  gameSessions GameSession[]
+  gameStats    GameStats[]
+  quests       QuestProgress[]
+  achievements Achievement[]
+
+  @@id([discordId, guildId])
+  @@index([guildId, level])
+  @@index([guildId, wallet])
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  discordId String
+  guildId   String
+  amount    Int
+  balance   Int
+  bank      Int      @default(0)
+  source    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [discordId, guildId], references: [discordId, guildId], onDelete: Cascade)
+
+  @@index([discordId, guildId, createdAt])
+  @@index([guildId, createdAt])
+}
+
+model UserUpgrade {
+  id        String @id @default(cuid())
+  discordId String
+  guildId   String
+  upgradeId String
+  rank      Int    @default(1)
+
+  user User @relation(fields: [discordId, guildId], references: [discordId, guildId], onDelete: Cascade)
+
+  @@unique([discordId, guildId, upgradeId])
+}
+
+model GameSession {
+  id        String   @id @default(cuid())
+  discordId String
+  guildId   String
+  gameType  String
+  bet       Int
+  state     Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [discordId, guildId], references: [discordId, guildId], onDelete: Cascade)
+
+  @@index([discordId, guildId, gameType])
+  @@index([expiresAt])
+}
+
+model GameStats {
+  id           String @id @default(cuid())
+  discordId    String
+  guildId      String
+  gameType     String
+  gamesPlayed  Int    @default(0)
+  wins         Int    @default(0)
+  losses       Int    @default(0)
+  totalWagered BigInt @default(0)
+  totalWon     BigInt @default(0)
+  biggestWin   Int    @default(0)
+  netProfit    Int    @default(0)
+
+  user User @relation(fields: [discordId, guildId], references: [discordId, guildId], onDelete: Cascade)
+
+  @@unique([discordId, guildId, gameType])
+}
+
+model QuestProgress {
+  id          String    @id @default(cuid())
+  discordId   String
+  guildId     String
+  questDate   String
+  quests      Json
+  completed   Int       @default(0)
+  streakBonus Int       @default(0)
+  claimedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [discordId, guildId], references: [discordId, guildId], onDelete: Cascade)
+
+  @@unique([discordId, guildId, questDate])
+}
+
+model Achievement {
+  id            String   @id @default(cuid())
+  discordId     String
+  guildId       String
+  achievementId String
+  earnedAt      DateTime @default(now())
+
+  user User @relation(fields: [discordId, guildId], references: [discordId, guildId], onDelete: Cascade)
+
+  @@unique([discordId, guildId, achievementId])
+}
+
+model GuildConfig {
+  guildId              String   @id
+  dailyBonusMultiplier Float    @default(1.0)
+  disabledGames        Json     @default("[]")
+  disabledCommands     Json     @default("[]")
+  transferTaxOverride  Float?
+  announceChannelId    String?
+  welcomeBonus         Int      @default(0)
+  globalLeaderboard    Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  guildId   String
+  adminId   String
+  action    String
+  targetId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([adminId])
+}
