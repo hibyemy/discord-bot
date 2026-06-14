@@ -43,7 +43,10 @@ const command: Command = {
         },
         {
           name: 'Games',
-          value: gameLines.join('\n'),
+          value: [
+            '`/play` — casino hub (menus & buttons, keeps chat clean)',
+            ...gameLines,
+          ].join('\n'),
           inline: false,
         },
         {

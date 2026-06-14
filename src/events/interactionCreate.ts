@@ -12,6 +12,14 @@ import {
   handleOneshotReplayButton,
   isOneshotReplayButton,
 } from './components/oneshot-replay.handler.js';
+import {
+  handlePlayButton,
+  handlePlayModal,
+  handlePlaySelect,
+  isPlayButton,
+  isPlayModal,
+  isPlaySelect,
+} from './components/play.handler.js';
 import adminCommand from '../commands/admin/admin.js';
 import {
   handleQuestClaimButton,
@@ -36,6 +44,10 @@ export function registerInteractionCreateEvent(client: Client): void {
       try {
         if (interaction.customId === QUEST_CLAIM_CUSTOM_ID) {
           await handleQuestClaimButton(interaction);
+          return;
+        }
+        if (isPlayButton(interaction.customId)) {
+          await handlePlayButton(interaction);
           return;
         }
         if (isBlackjackButton(interaction.customId)) {
@@ -69,6 +81,40 @@ export function registerInteractionCreateEvent(client: Client): void {
         } else {
           await interaction.reply(payload);
         }
+      }
+      return;
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      try {
+        if (isPlaySelect(interaction.customId)) {
+          await handlePlaySelect(interaction);
+          return;
+        }
+      } catch (err) {
+        console.error(`Select menu error [${interaction.customId}]:`, err);
+        const message =
+          err instanceof GamblebotError
+            ? err.message
+            : 'An unexpected error occurred.';
+        await interaction.reply({ embeds: [errorEmbed(message)], ephemeral: true });
+      }
+      return;
+    }
+
+    if (interaction.isModalSubmit()) {
+      try {
+        if (isPlayModal(interaction.customId)) {
+          await handlePlayModal(interaction);
+          return;
+        }
+      } catch (err) {
+        console.error(`Modal error [${interaction.customId}]:`, err);
+        const message =
+          err instanceof GamblebotError
+            ? err.message
+            : 'An unexpected error occurred.';
+        await interaction.reply({ embeds: [errorEmbed(message)], ephemeral: true });
       }
       return;
     }
