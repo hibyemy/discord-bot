@@ -5,7 +5,7 @@ import {
   jobConfig,
   workXpForTier,
 } from '../config/jobs.js';
-import type { IJobService, IShopService, UserKey, WorkResult } from '../contracts/services.js';
+import type { IJobService, UserKey, WorkResult } from '../contracts/services.js';
 import {
   CooldownError,
   LockedError,
@@ -13,16 +13,11 @@ import {
   ValidationError,
 } from '../contracts/errors.js';
 import { prisma } from '../db.js';
-import {
-  economyService,
-  progressionService,
-  shopService,
-} from './index.js';
+import { economyService } from './economy.service.js';
+import { progressionService } from './progression.service.js';
+import { shopService } from './shop.service.js';
 import { applyCooldownReduction } from '../utils/cooldowns.js';
 import { chance, randomFloat, randomInt } from '../utils/rng.js';
-
-/** Stub ShopService omits param types until Wave 3 lane L implements it. */
-const shop = shopService as IShopService;
 
 export class JobService implements IJobService {
   private async getUser(key: UserKey): Promise<User> {
@@ -30,7 +25,7 @@ export class JobService implements IJobService {
   }
 
   private async getEffectiveCooldownMs(key: UserKey, baseCooldownMs: number): Promise<number> {
-    const multipliers = await shop.getActiveMultipliers(key);
+    const multipliers = await shopService.getActiveMultipliers(key);
     return applyCooldownReduction(
       baseCooldownMs,
       multipliers.cooldownReduction,
@@ -120,7 +115,7 @@ export class JobService implements IJobService {
       throw new LockedError(job.name, job.unlockLevel, level);
     }
 
-    const multipliers = await shop.getActiveMultipliers(key);
+    const multipliers = await shopService.getActiveMultipliers(key);
     const cooldownMs = await this.getEffectiveCooldownMs(key, job.cooldownMs);
 
     const basePay = randomInt(job.basePayMin, job.basePayMax);

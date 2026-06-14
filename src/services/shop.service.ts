@@ -17,7 +17,8 @@ import {
   ValidationError,
 } from '../contracts/errors.js';
 import { prisma } from '../db.js';
-import { economyService, progressionService } from './index.js';
+import { economyService } from './economy.service.js';
+import { progressionService } from './progression.service.js';
 
 const DEFAULT_MULTIPLIERS: ShopMultipliers = {
   jobPayout: 1,
