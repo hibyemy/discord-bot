@@ -4,6 +4,7 @@ import {
   type User as DiscordUser,
 } from 'discord.js';
 import { economyConfig } from '../config/economy.js';
+import { formatRankTier, getRankTierForLevel } from '../config/ranks.js';
 
 export const embedColors = {
   success: 0x57f287 as ColorResolvable,
@@ -60,11 +61,17 @@ export function profileEmbed(
     badges?: string[];
   },
 ): EmbedBuilder {
+  const tier = getRankTierForLevel(data.level);
   const embed = new EmbedBuilder()
     .setColor(embedColors.info)
     .setTitle(`${user.displayName}'s Profile`)
     .setThumbnail(user.displayAvatarURL())
     .addFields(
+      {
+        name: 'Rank',
+        value: formatRankTier(tier.current),
+        inline: true,
+      },
       {
         name: 'Level',
         value: `${data.level} (${progressBar(data.xp, data.xpRequired)} ${data.xp}/${data.xpRequired} XP)`,
