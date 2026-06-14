@@ -40,6 +40,7 @@ import {
 } from '../../services/index.js';
 import { embedColors, errorEmbed, formatCoins, infoEmbed, profileEmbed, progressBar, successEmbed } from '../../utils/embeds.js';
 import { formatCooldown } from '../../utils/cooldowns.js';
+import { dailyResetLine } from '../../utils/daily-reset.js';
 import {
   fetchLeaderboard,
   formatLeaderboardLines,
@@ -117,7 +118,7 @@ function backButton(userId: string, label = 'Back to main menu'): ButtonBuilder 
 
 function backToProgressionButton(userId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${PREFIX}cat:${userId}:progression`)
+    .setCustomId(`${PREFIX}back:prog:${userId}`)
     .setLabel('Back')
     .setStyle(ButtonStyle.Secondary);
 }
@@ -145,12 +146,11 @@ function formatTransaction(tx: Transaction): string {
 }
 
 export function isMenuSelect(customId: string): boolean {
-  return (
-    customId.startsWith(`${PREFIX}cat:`) ||
-    customId.startsWith(`${PREFIX}jobset:`) ||
-    customId.startsWith(`${PREFIX}shopbuy:`) ||
-    customId.startsWith(`${PREFIX}lbtype:`)
-  );
+  if (!customId.startsWith(PREFIX)) return false;
+  const parts = customId.split(':');
+  if (parts.length !== 3) return false;
+  const kind = parts[1];
+  return kind === 'cat' || kind === 'jobset' || kind === 'shopbuy' || kind === 'lbtype';
 }
 
 export function isMenuUserSelect(customId: string): boolean {
@@ -177,6 +177,7 @@ export async function buildMainMenuPayload(key: UserKey, userId: string) {
     .setDescription(
       [
         `**Wallet:** ${formatCoins(balance.wallet)} · **Bank:** ${formatCoins(balance.bank)} · **Level:** ${level}`,
+        dailyResetLine(),
         '',
         'Choose a category below. This menu is **private** — only you see it.',
         'Individual slash commands still work if you prefer them.',
@@ -233,6 +234,8 @@ async function buildEconomyPayload(key: UserKey, userId: string) {
       `**Wallet:** ${formatCoins(balance.wallet)}`,
       `**Bank:** ${formatCoins(balance.bank)}`,
       `**Net worth:** ${formatCoins(balance.netWorth)}`,
+      '',
+      dailyResetLine(),
       '',
       'Pick an action below.',
     ].join('\n'),
@@ -301,6 +304,8 @@ async function buildJobsPayload(key: UserKey, userId: string) {
       cooldownMs > 0
         ? `**Work cooldown:** ${formatCooldown(cooldownMs)}`
         : '**Ready to work!**',
+      '',
+      dailyResetLine(),
     ].join('\n'),
   );
 
@@ -406,7 +411,7 @@ async function buildShopPayload(key: UserKey, userId: string) {
 function buildProgressionPayload(userId: string) {
   const embed = infoEmbed(
     '⭐ Progression',
-    'Profile, quests, achievements, rank, and leaderboards.',
+    ['Profile, quests, achievements, rank, and leaderboards.', '', dailyResetLine()].join('\n'),
   );
 
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -443,16 +448,26 @@ async function showCategory(
   interaction: MessageComponentInteraction,
   ctx: MenuContext,
   category: string,
+  editReply = false,
 ): Promise<void> {
+  const apply = async (payload: {
+    embed: EmbedBuilder;
+    components: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[];
+  }) => {
+    if (editReply) {
+      await interaction.editReply(payload);
+    } else {
+      await interaction.update(payload);
+    }
+  };
+
   switch (category) {
     case 'economy': {
-      const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-      await interaction.update(payload);
+      await apply(await buildEconomyPayload(ctx.key, ctx.userId));
       return;
     }
     case 'jobs': {
-      const payload = await buildJobsPayload(ctx.key, ctx.userId);
-      await interaction.update(payload);
+      await apply(await buildJobsPayload(ctx.key, ctx.userId));
       return;
     }
     case 'games': {
@@ -464,17 +479,19 @@ async function showCategory(
         ...payload.components,
         new ActionRowBuilder<ButtonBuilder>().addComponents(backButton(ctx.userId)),
       ];
-      await interaction.update({ embeds: [embed], components });
+      if (editReply) {
+        await interaction.editReply({ embeds: [embed], components });
+      } else {
+        await interaction.update({ embeds: [embed], components });
+      }
       return;
     }
     case 'shop': {
-      const payload = await buildShopPayload(ctx.key, ctx.userId);
-      await interaction.update(payload);
+      await apply(await buildShopPayload(ctx.key, ctx.userId));
       return;
     }
     case 'progression': {
-      const payload = buildProgressionPayload(ctx.userId);
-      await interaction.update(payload);
+      await apply(buildProgressionPayload(ctx.userId));
       return;
     }
     default:
@@ -550,32 +567,30 @@ export async function handleMenuSelect(interaction: StringSelectMenuInteraction)
     const ctx = await getMenuContext(interaction, userId);
     if (!ctx) return;
     const category = interaction.values[0]!;
-    await showCategory(interaction, ctx, category);
+    await interaction.deferUpdate();
+    await showCategory(interaction, ctx, category, true);
     return;
   }
 
-  if (parts[1] === 'jobset') {
-    const userId = parseUserIdFromParts(parts, 2);
-    if (!userId) return;
-    const ctx = await getMenuContext(interaction, userId);
-    if (!ctx) return;
+  const userId = parseUserIdFromParts(parts, 2);
+  if (!userId) return;
+  const ctx = await getMenuContext(interaction, userId);
+  if (!ctx) return;
 
+  if (parts[1] === 'jobset') {
+    await interaction.deferUpdate();
     const jobName = interaction.values[0]!;
     const user = await jobService.setJob(ctx.key, jobName);
     const payload = await buildJobsPayload(ctx.key, ctx.userId);
     payload.embed.setDescription(
       `${payload.embed.data.description ?? ''}\n\n✅ Active job set to **${user.activeJob}**.`,
     );
-    await interaction.update(payload);
+    await interaction.editReply(payload);
     return;
   }
 
   if (parts[1] === 'shopbuy') {
-    const userId = parseUserIdFromParts(parts, 2);
-    if (!userId) return;
-    const ctx = await getMenuContext(interaction, userId);
-    if (!ctx) return;
-
+    await interaction.deferUpdate();
     const upgradeId = interaction.values[0]!;
     await shopService.buy(ctx.key, upgradeId);
     await emitShopPurchaseEvents(ctx.key);
@@ -584,16 +599,12 @@ export async function handleMenuSelect(interaction: StringSelectMenuInteraction)
     payload.embed.setDescription(
       `${payload.embed.data.description ?? ''}\n\n✅ Purchased **${upgradeId}** upgrade.`,
     );
-    await interaction.update(payload);
+    await interaction.editReply(payload);
     return;
   }
 
   if (parts[1] === 'lbtype') {
-    const userId = parseUserIdFromParts(parts, 2);
-    if (!userId) return;
-    const ctx = await getMenuContext(interaction, userId);
-    if (!ctx) return;
-
+    await interaction.deferUpdate();
     const type = interaction.values[0] as LeaderboardType;
     const config = await guildConfigService.getConfig(ctx.guildId);
     const rows = await fetchLeaderboard(type, ctx.guildId, config.globalLeaderboard);
@@ -614,7 +625,7 @@ export async function handleMenuSelect(interaction: StringSelectMenuInteraction)
       .setDescription(formatLeaderboardLines(rows, names, meta.format))
       .setFooter({ text: config.globalLeaderboard ? 'Global' : 'This server' });
 
-    await interaction.update({
+    await interaction.editReply({
       embeds: [embed],
       components: [
         new ActionRowBuilder<ButtonBuilder>().addComponents(backToProgressionButton(userId)),
@@ -663,24 +674,36 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
   const section = parts[1];
   if (!section) return;
 
+  const needsModal =
+    section === 'eco' && (parts[2] === 'dep' || parts[2] === 'with');
+
   try {
     if (section === 'home') {
       const userId = parseUserIdFromParts(parts, 2);
       if (!userId) return;
       const ctx = await getMenuContext(interaction, userId);
       if (!ctx) return;
+      await interaction.deferUpdate();
       const payload = await buildMainMenuPayload(ctx.key, ctx.userId);
-      await interaction.update(payload);
+      await interaction.editReply(payload);
       return;
     }
 
-    if (section === 'cat') {
-      const userId = parseUserIdFromParts(parts, 2);
-      const category = parts[3];
-      if (!userId || !category) return;
+    if (section === 'back') {
+      const target = parts[2];
+      const userId = parseUserIdFromParts(parts, 3);
+      if (!userId || !target) return;
       const ctx = await getMenuContext(interaction, userId);
       if (!ctx) return;
-      await showCategory(interaction, ctx, category);
+      await interaction.deferUpdate();
+      if (target === 'prog') {
+        await interaction.editReply(buildProgressionPayload(ctx.userId));
+        return;
+      }
+      if (target === 'eco') {
+        await interaction.editReply(await buildEconomyPayload(ctx.key, ctx.userId));
+        return;
+      }
       return;
     }
 
@@ -688,6 +711,46 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
     if (!userId) return;
     const ctx = await getMenuContext(interaction, userId);
     if (!ctx) return;
+
+    if (needsModal) {
+      const action = parts[2];
+      if (action === 'dep') {
+        await interaction.showModal(
+          new ModalBuilder()
+            .setCustomId(`${PREFIX}modal:dep:${userId}`)
+            .setTitle('Deposit to bank')
+            .addComponents(
+              new ActionRowBuilder<TextInputBuilder>().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('amount')
+                  .setLabel('Amount (coins)')
+                  .setStyle(TextInputStyle.Short)
+                  .setRequired(true),
+              ),
+            ),
+        );
+        return;
+      }
+      if (action === 'with') {
+        await interaction.showModal(
+          new ModalBuilder()
+            .setCustomId(`${PREFIX}modal:with:${userId}`)
+            .setTitle('Withdraw from bank')
+            .addComponents(
+              new ActionRowBuilder<TextInputBuilder>().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('amount')
+                  .setLabel('Amount (coins)')
+                  .setStyle(TextInputStyle.Short)
+                  .setRequired(true),
+              ),
+            ),
+        );
+        return;
+      }
+    }
+
+    await interaction.deferUpdate();
 
     if (section === 'eco') {
       const action = parts[2];
@@ -703,7 +766,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
               { name: 'Net Worth', value: formatCoins(balance.netWorth), inline: true },
             );
           const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-          await interaction.update({ ...payload, embeds: [embed, payload.embed] });
+          await interaction.editReply({ embeds: [embed, payload.embed], components: payload.components });
           return;
         }
         case 'daily': {
@@ -718,8 +781,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
             ],
             ephemeral: false,
           });
-          const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-          await interaction.editReply(payload);
+          await interaction.editReply(await buildEconomyPayload(ctx.key, ctx.userId));
           return;
         }
         case 'tx': {
@@ -730,45 +792,14 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
               : transactions.map(formatTransaction).join('\n');
           const txEmbed = infoEmbed('Recent Transactions', description);
           const payload = await buildEconomyPayload(ctx.key, ctx.userId);
-          await interaction.update({ embeds: [txEmbed, payload.embed], components: payload.components });
-          return;
-        }
-        case 'dep': {
-          await interaction.showModal(
-            new ModalBuilder()
-              .setCustomId(`${PREFIX}modal:dep:${userId}`)
-              .setTitle('Deposit to bank')
-              .addComponents(
-                new ActionRowBuilder<TextInputBuilder>().addComponents(
-                  new TextInputBuilder()
-                    .setCustomId('amount')
-                    .setLabel('Amount (coins)')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true),
-                ),
-              ),
-          );
-          return;
-        }
-        case 'with': {
-          await interaction.showModal(
-            new ModalBuilder()
-              .setCustomId(`${PREFIX}modal:with:${userId}`)
-              .setTitle('Withdraw from bank')
-              .addComponents(
-                new ActionRowBuilder<TextInputBuilder>().addComponents(
-                  new TextInputBuilder()
-                    .setCustomId('amount')
-                    .setLabel('Amount (coins)')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true),
-                ),
-              ),
-          );
+          await interaction.editReply({
+            embeds: [txEmbed, payload.embed],
+            components: payload.components,
+          });
           return;
         }
         case 'pay': {
-          await interaction.update({
+          await interaction.editReply({
             embeds: [
               infoEmbed('Pay Member', 'Select who you want to pay from the dropdown below.'),
             ],
@@ -804,8 +835,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
         );
 
       await interaction.followUp({ embeds: [embed], ephemeral: false });
-      const payload = await buildJobsPayload(ctx.key, ctx.userId);
-      await interaction.editReply(payload);
+      await interaction.editReply(await buildJobsPayload(ctx.key, ctx.userId));
       return;
     }
 
@@ -833,7 +863,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
       }
 
       const payload = await buildShopPayload(ctx.key, ctx.userId);
-      await interaction.update({
+      await interaction.editReply({
         embeds: [invEmbed, payload.embed],
         components: payload.components,
       });
@@ -857,7 +887,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
             dailyStreak: dbUser.dailyStreak,
             badges: badges.length > 0 ? badges : ['No badges yet'],
           });
-          await interaction.update({
+          await interaction.editReply({
             embeds: [embed],
             components: [
               new ActionRowBuilder<ButtonBuilder>().addComponents(backToProgressionButton(userId)),
@@ -892,7 +922,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
                 value: rankings.map(formatRankingLine).join('\n'),
               },
             );
-          await interaction.update({
+          await interaction.editReply({
             embeds: [embed],
             components: [
               new ActionRowBuilder<ButtonBuilder>().addComponents(backToProgressionButton(userId)),
@@ -902,8 +932,12 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
         }
         case 'quests': {
           const board = await questService.getDailyQuests(ctx.key);
-          await interaction.update({
-            embeds: [questBoardEmbed(board)],
+          const questEmbed = questBoardEmbed(board);
+          questEmbed.setDescription(
+            `${questEmbed.data.description ?? ''}\n\n_${dailyResetLine()}_`,
+          );
+          await interaction.editReply({
+            embeds: [questEmbed],
             components: [
               questClaimButtonRow(board),
               new ActionRowBuilder<ButtonBuilder>().addComponents(backToProgressionButton(userId)),
@@ -933,7 +967,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
             });
           }
 
-          await interaction.update({
+          await interaction.editReply({
             embeds: [embed],
             components: [
               new ActionRowBuilder<ButtonBuilder>().addComponents(backToProgressionButton(userId)),
@@ -942,7 +976,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
           return;
         }
         case 'lb': {
-          await interaction.update({
+          await interaction.editReply({
             embeds: [infoEmbed('Leaderboard', 'Pick a category to view the top 10.')],
             components: [
               new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -980,6 +1014,8 @@ export async function handleMenuModal(interaction: ModalSubmitInteraction): Prom
   if (!ctx) return;
 
   try {
+    await interaction.deferUpdate();
+
     const amount = Number.parseInt(interaction.fields.getTextInputValue('amount').trim(), 10);
 
     if (kind === 'dep') {
@@ -988,7 +1024,6 @@ export async function handleMenuModal(interaction: ModalSubmitInteraction): Prom
       }
       const user = await economyService.deposit(ctx.key, amount);
       await emitDepositEvents(ctx.key, amount);
-      await interaction.deferUpdate();
       await interaction.followUp({
         embeds: [
           successEmbed(
@@ -1008,7 +1043,6 @@ export async function handleMenuModal(interaction: ModalSubmitInteraction): Prom
         throw new ValidationError('Enter a valid amount.');
       }
       const user = await economyService.withdraw(ctx.key, amount);
-      await interaction.deferUpdate();
       await interaction.followUp({
         embeds: [
           successEmbed(
@@ -1035,7 +1069,6 @@ export async function handleMenuModal(interaction: ModalSubmitInteraction): Prom
         'transfer_out',
       );
       await emitPayEvents(ctx.key, result.sent);
-      await interaction.deferUpdate();
       await interaction.followUp({
         embeds: [
           successEmbed(
