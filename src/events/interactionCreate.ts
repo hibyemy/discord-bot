@@ -13,6 +13,16 @@ import {
   isOneshotReplayButton,
 } from './components/oneshot-replay.handler.js';
 import {
+  handleMenuButton,
+  handleMenuModal,
+  handleMenuSelect,
+  handleMenuUserSelect,
+  isMenuButton,
+  isMenuModal,
+  isMenuSelect,
+  isMenuUserSelect,
+} from './components/menu.handler.js';
+import {
   handlePlayButton,
   handlePlayModal,
   handlePlaySelect,
@@ -44,6 +54,10 @@ export function registerInteractionCreateEvent(client: Client): void {
       try {
         if (interaction.customId === QUEST_CLAIM_CUSTOM_ID) {
           await handleQuestClaimButton(interaction);
+          return;
+        }
+        if (isMenuButton(interaction.customId)) {
+          await handleMenuButton(interaction);
           return;
         }
         if (isPlayButton(interaction.customId)) {
@@ -87,6 +101,10 @@ export function registerInteractionCreateEvent(client: Client): void {
 
     if (interaction.isStringSelectMenu()) {
       try {
+        if (isMenuSelect(interaction.customId)) {
+          await handleMenuSelect(interaction);
+          return;
+        }
         if (isPlaySelect(interaction.customId)) {
           await handlePlaySelect(interaction);
           return;
@@ -102,8 +120,29 @@ export function registerInteractionCreateEvent(client: Client): void {
       return;
     }
 
+    if (interaction.isUserSelectMenu()) {
+      try {
+        if (isMenuUserSelect(interaction.customId)) {
+          await handleMenuUserSelect(interaction);
+          return;
+        }
+      } catch (err) {
+        console.error(`User select error [${interaction.customId}]:`, err);
+        const message =
+          err instanceof GamblebotError
+            ? err.message
+            : 'An unexpected error occurred.';
+        await interaction.reply({ embeds: [errorEmbed(message)], ephemeral: true });
+      }
+      return;
+    }
+
     if (interaction.isModalSubmit()) {
       try {
+        if (isMenuModal(interaction.customId)) {
+          await handleMenuModal(interaction);
+          return;
+        }
         if (isPlayModal(interaction.customId)) {
           await handlePlayModal(interaction);
           return;

@@ -18,11 +18,19 @@ const command: Command = {
       .setColor(embedColors.info)
       .setTitle('Gamblebot Help')
       .setDescription(
-        'Progressive fake-currency economy bot. Earn coins, level up, and unlock games & shop tiers.',
+        'Progressive fake-currency economy bot. Start with **`/menu`** for the full hub (private menus, less chat spam). Individual slash commands still work.',
       )
       .addFields(
         {
-          name: 'Economy',
+          name: 'Main hub',
+          value: [
+            '`/menu` — economy, jobs, games, shop, progression',
+            '`/play` — shortcut to the casino / games hub',
+          ].join('\n'),
+          inline: false,
+        },
+        {
+          name: 'Economy (also in /menu)',
           value: [
             '`/balance` — wallet & bank',
             '`/daily` — daily reward + streak',
@@ -33,16 +41,15 @@ const command: Command = {
           inline: false,
         },
         {
-          name: 'Jobs',
+          name: 'Jobs (also in /menu)',
           value: [
-            '`/jobs` — list available jobs',
-            '`/job set` — choose active job',
-            '`/work` — earn coins & XP (cooldown)',
+            '`/jobs` — list jobs · `/job set` · `/work`',
+            '_Or use the Jobs tab in `/menu` (all-in-one)._',
           ].join('\n'),
           inline: false,
         },
         {
-          name: 'Games',
+          name: 'Games (also in /menu → Games)',
           value: [
             '`/play` — casino hub (menus & buttons, keeps chat clean)',
             ...gameLines,
@@ -50,7 +57,7 @@ const command: Command = {
           inline: false,
         },
         {
-          name: 'Shop & progression',
+          name: 'Shop & progression (also in /menu)',
           value: [
             '`/shop` — browse upgrades',
             '`/buy` — purchase upgrade ranks',
