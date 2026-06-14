@@ -243,6 +243,7 @@ const command: Command & {
           bank: economyConfig.startingBank,
           level: economyConfig.startingLevel,
           xp: economyConfig.startingXp,
+          cooldowns: {},
         },
         update: {
           wallet: economyConfig.startingBalance,
