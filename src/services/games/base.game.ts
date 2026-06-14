@@ -205,7 +205,9 @@ export async function runGameFlow<TInput, TDetails = Record<string, unknown>>(
   const { key, gameType, bet, input, validateInput, resolve, betAlreadyDeducted, eventBus } =
     options;
 
-  await validateBet(key, bet);
+  if (!betAlreadyDeducted) {
+    await validateBet(key, bet);
+  }
   if (validateInput) {
     await validateInput(key, bet, input);
   }
