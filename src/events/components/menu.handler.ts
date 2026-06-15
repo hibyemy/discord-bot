@@ -43,7 +43,7 @@ import {
 } from '../../services/index.js';
 import { embedColors, errorEmbed, formatCoins, infoEmbed, profileEmbed } from '../../utils/embeds.js';
 import { formatCooldown } from '../../utils/cooldowns.js';
-import { dailyResetLine } from '../../utils/daily-reset.js';
+import { dailyResetLine, questResetLine } from '../../utils/daily-reset.js';
 import { buildHubProgressLine } from '../../utils/progression-display.js';
 import { resolveMemberLabel } from '../../utils/member-label-cache.js';
 import {
@@ -433,7 +433,7 @@ async function buildShopPayload(key: UserKey, userId: string) {
 function buildProgressionPayload(userId: string) {
   const embed = infoEmbed(
     '⭐ Progression',
-    ['Profile, quests, achievements, rank, and leaderboards.', '', dailyResetLine()].join('\n'),
+    ['Profile, quests, achievements, rank, and leaderboards.', '', questResetLine(), dailyResetLine()].join('\n'),
   );
 
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -996,7 +996,7 @@ export async function handleMenuButton(interaction: ButtonInteraction): Promise<
           const board = await questService.getDailyQuests(ctx.key);
           const questEmbed = questBoardEmbed(board);
           questEmbed.setDescription(
-            `${questEmbed.data.description ?? ''}\n\n_${dailyResetLine()}_`,
+            `${questEmbed.data.description ?? ''}\n\n_${questResetLine()}_`,
           );
           await interaction.editReply({
             embeds: [questEmbed],

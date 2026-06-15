@@ -77,7 +77,7 @@ Progressive **fake-currency** Discord economy bot built with Node.js, TypeScript
 - **Games** — coinflip, dice, slots, roulette, blackjack, crash (with play-again / new game)
 - **Menu hub** — `/menu` for economy, jobs, casino, shop, and progression
 - **Shop** — permanent upgrades (payout, cooldown, bank interest, etc.)
-- **Quests** — 3 daily quests with streak bonuses (resets midnight UTC)
+- **Quests** — 3 hourly quests with streak bonuses (resets every hour UTC)
 - **Achievements** — one-time milestones with coin/XP rewards
 - **Admin** — `/admin` for give/take/setlevel/reset/config/stats
 
@@ -85,7 +85,7 @@ Progressive **fake-currency** Discord economy bot built with Node.js, TypeScript
 
 On bot ready, the scheduler runs:
 
-- **Quest reset** — prunes stale quest progress (midnight UTC)
+- **Quest reset** — prunes stale quest progress (top of each hour UTC)
 - **Bank interest** — daily interest on bank balances (midnight UTC)
 
 ## Project structure

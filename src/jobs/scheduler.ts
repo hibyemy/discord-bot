@@ -29,5 +29,5 @@ export function startScheduler(): void {
     { timezone: questResetTimezone },
   );
 
-  console.log('Scheduler started (quest reset + bank interest, midnight UTC)');
+  console.log('Scheduler started (hourly quest reset + bank interest midnight UTC)');
 }

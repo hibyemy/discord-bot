@@ -14,7 +14,7 @@ const COLLECTOR_MS = 5 * 60 * 1000;
 const command: Command = {
   data: new SlashCommandBuilder()
     .setName('quests')
-    .setDescription('View your daily quest board and claim rewards'),
+    .setDescription('View your hourly quest board and claim rewards'),
   async execute(interaction) {
     const key = userKey(interaction);
     const board = await questService.getDailyQuests(key);

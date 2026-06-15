@@ -6,6 +6,7 @@ import { GamblebotError } from '../../contracts/errors.js';
 import type { UserKey } from '../../contracts/services.js';
 import {
   buildBlackjackButtons,
+  BLACKJACK_MENU_FOOTER,
   doubleBlackjack,
   forfeitBlackjack,
   hitBlackjack,
@@ -81,7 +82,7 @@ function activeHandEmbed(
         inline: true,
       },
     )
-    .setFooter({ text: 'Hit, Stand, Double, or Quit to forfeit — 60s to act' });
+    .setFooter({ text: BLACKJACK_MENU_FOOTER });
 }
 
 function resultEmbed(

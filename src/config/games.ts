@@ -61,7 +61,7 @@ export const gamesConfig = {
       name: 'Blackjack',
       unlockLevel: 5,
       houseEdge: 0.01,
-      description: 'Hit, stand, or double — lowest house edge.',
+      description: 'Hit, stand, or double — 3:2 blackjack, dealer stands on 17.',
       interactive: true,
       sessionTimeoutMs: 60_000,
     },

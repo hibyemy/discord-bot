@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { ActiveSessionError, ValidationError } from '../../contracts/errors.js';
 import type { UserKey } from '../../contracts/services.js';
-import { getGame, gamesConfig } from '../../config/games.js';
+import { gamesConfig } from '../../config/games.js';
 import { prisma } from '../../db.js';
 import { shuffle } from '../../utils/rng.js';
 import {
@@ -20,6 +20,14 @@ import {
 } from './base.game.js';
 
 const GAME_TYPE = 'blackjack' as const;
+/** Dealer stands on hard and soft 17 (S17). */
+export const DEALER_STAND_ON = 17;
+
+export const BLACKJACK_ACTIVE_FOOTER =
+  '3:2 blackjack • Dealer stands on 17 • Hit, Stand, Double — 60s to act';
+
+export const BLACKJACK_MENU_FOOTER =
+  '3:2 blackjack • Dealer stands on 17 • Hit, Stand, Double, or Quit — 60s to act';
 const SUITS = ['♠', '♥', '♦', '♣'] as const;
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const;
 
@@ -139,20 +147,20 @@ function dealerShowsAceOrTen(hand: readonly Card[]): boolean {
   return up.rank === 'A' || rankValue(up.rank) === 10;
 }
 
+function shouldDealerHit(hand: readonly Card[]): boolean {
+  return handValue(hand) < DEALER_STAND_ON;
+}
+
 function playDealer(state: BlackjackState): void {
   state.dealerRevealed = true;
-  while (handValue(state.dealerHand) < 17) {
+  while (shouldDealerHit(state.dealerHand)) {
     state.dealerHand.push(drawCard(state.deck));
   }
 }
 
-function getHouseEdge(): number {
-  return getGame(GAME_TYPE)?.houseEdge ?? 0.01;
-}
-
-/** 6:5 blackjack payout (~1% house edge) instead of 3:2. */
+/** Standard 3:2 natural blackjack — returns bet + 1.5× winnings. */
 function blackjackPayout(totalBet: number): number {
-  return Math.floor(totalBet * 2.2);
+  return Math.floor(totalBet * 2.5);
 }
 
 export function computeOutcome(
@@ -163,7 +171,6 @@ export function computeOutcome(
   const playerValue = handValue(playerHand);
   const dealerValue = handValue(dealerHand);
   const doubled = false;
-  const houseEdge = getHouseEdge();
 
   const details = (outcome: BlackjackOutcome): BlackjackDetails => ({
     playerHand: [...playerHand],
@@ -210,10 +217,6 @@ export function computeOutcome(
   }
 
   if (playerValue < dealerValue) {
-    return { won: false, payout: 0, details: details('lose') };
-  }
-
-  if (Math.random() < houseEdge) {
     return { won: false, payout: 0, details: details('lose') };
   }
 

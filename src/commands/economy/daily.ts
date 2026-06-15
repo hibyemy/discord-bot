@@ -16,7 +16,7 @@ const command: Command = {
 
     const multiplierNote =
       result.multiplier > 1
-        ? ` (${result.multiplier}x bonus active)`
+        ? ` (${result.multiplier.toFixed(2)}× bonus active)`
         : '';
 
     const embed = new EmbedBuilder()

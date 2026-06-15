@@ -6,11 +6,14 @@ export const economyConfig = {
   startingXp: 0,
 
   /** Daily reward base amount (day 1) */
-  dailyBaseReward: 500,
-  /** Streak multiplier kicks in at day 7+ (2x) */
-  dailyStreakMultiplierDay: 7,
-  dailyStreakMultiplier: 2,
-  dailyStreakCap: 30,
+  dailyBaseReward: 1000,
+  /** +12% payout per streak day before milestone (day 2 = 1.12×, day 4 = 1.36×, etc.) */
+  dailyStreakRampPerDay: 0.12,
+  /** Full streak bonus kicks in at this many consecutive days */
+  dailyStreakMultiplierDay: 5,
+  /** Payout multiplier at/above streak milestone day */
+  dailyStreakMultiplier: 5,
+  dailyStreakCap: 45,
 
   /** P2P transfer tax (5% sink) */
   transferTaxRate: 0.05,
@@ -60,11 +63,14 @@ export function maxBetForLevel(level: number, bonusMultiplier = 1): number {
   return Math.floor(base * bonusMultiplier);
 }
 
+export function dailyStreakPayMultiplier(streak: number): number {
+  const days = Math.min(Math.max(streak, 1), economyConfig.dailyStreakCap);
+  if (days >= economyConfig.dailyStreakMultiplierDay) {
+    return economyConfig.dailyStreakMultiplier;
+  }
+  return 1 + (days - 1) * economyConfig.dailyStreakRampPerDay;
+}
+
 export function dailyRewardForStreak(streak: number): number {
-  const capped = Math.min(streak, economyConfig.dailyStreakCap);
-  const multiplier =
-    capped >= economyConfig.dailyStreakMultiplierDay
-      ? economyConfig.dailyStreakMultiplier
-      : 1;
-  return Math.floor(economyConfig.dailyBaseReward * multiplier);
+  return Math.floor(economyConfig.dailyBaseReward * dailyStreakPayMultiplier(streak));
 }

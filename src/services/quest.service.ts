@@ -20,14 +20,18 @@ interface StoredQuestState {
   winStreak?: number;
 }
 
-function utcDateKey(date: Date = new Date()): string {
-  return date.toISOString().slice(0, 10);
+function utcQuestPeriodKey(date: Date = new Date()): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  const h = String(date.getUTCHours()).padStart(2, '0');
+  return `${y}-${m}-${d}-${h}`;
 }
 
-function previousUtcDateKey(date: Date = new Date()): string {
+function previousQuestPeriodKey(date: Date = new Date()): string {
   const prev = new Date(date);
-  prev.setUTCDate(prev.getUTCDate() - 1);
-  return utcDateKey(prev);
+  prev.setUTCHours(prev.getUTCHours() - 1);
+  return utcQuestPeriodKey(prev);
 }
 
 function getPoolEntry(poolId: string): QuestPoolEntry {
@@ -161,13 +165,13 @@ function applyEventToQuest(
 
 export class QuestService implements IQuestService {
   private async computeStreakBonus(key: UserKey): Promise<number> {
-    const yesterday = previousUtcDateKey();
+    const previousKey = previousQuestPeriodKey();
     const previous = await prisma.questProgress.findUnique({
       where: {
         discordId_guildId_questDate: {
           discordId: key.discordId,
           guildId: key.guildId,
-          questDate: yesterday,
+          questDate: previousKey,
         },
       },
     });
@@ -185,7 +189,7 @@ export class QuestService implements IQuestService {
   async generateDailyQuests(key: UserKey): Promise<QuestBoard> {
     await economyService.getOrCreateUser(key);
 
-    const questDate = utcDateKey();
+    const questDate = utcQuestPeriodKey();
     const existing = await prisma.questProgress.findUnique({
       where: {
         discordId_guildId_questDate: {
@@ -218,7 +222,7 @@ export class QuestService implements IQuestService {
   }
 
   async getDailyQuests(key: UserKey): Promise<QuestBoard> {
-    const questDate = utcDateKey();
+    const questDate = utcQuestPeriodKey();
     const record = await prisma.questProgress.findUnique({
       where: {
         discordId_guildId_questDate: {
@@ -238,7 +242,7 @@ export class QuestService implements IQuestService {
 
   async updateProgress(event: QuestEvent): Promise<void> {
     const key: UserKey = { discordId: event.discordId, guildId: event.guildId };
-    const questDate = utcDateKey(event.timestamp);
+    const questDate = utcQuestPeriodKey(event.timestamp);
 
     let record = await prisma.questProgress.findUnique({
       where: {
@@ -293,7 +297,7 @@ export class QuestService implements IQuestService {
   }
 
   async claimQuestReward(key: UserKey, questId: string): Promise<{ coins: number; xp: number }> {
-    const questDate = utcDateKey();
+    const questDate = utcQuestPeriodKey();
     const record = await prisma.questProgress.findUnique({
       where: {
         discordId_guildId_questDate: {
@@ -305,7 +309,7 @@ export class QuestService implements IQuestService {
     });
 
     if (!record) {
-      throw new ValidationError('No daily quests found for today.');
+      throw new ValidationError('No quests found for this hour.');
     }
 
     const stored = parseStoredQuests(record.quests);
@@ -333,7 +337,7 @@ export class QuestService implements IQuestService {
     await prisma.$transaction(async (tx) => {
       const fresh = await tx.questProgress.findUnique({ where: { id: record.id } });
       if (!fresh) {
-        throw new ValidationError('No daily quests found for today.');
+        throw new ValidationError('No quests found for this hour.');
       }
 
       const freshStored = parseStoredQuests(fresh.quests);
@@ -373,7 +377,7 @@ export class QuestService implements IQuestService {
   }
 
   async resetAllDaily(): Promise<number> {
-    const cutoff = previousUtcDateKey();
+    const cutoff = previousQuestPeriodKey();
     const result = await prisma.questProgress.deleteMany({
       where: {
         questDate: { lt: cutoff },

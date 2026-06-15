@@ -20,6 +20,7 @@ import { GamblebotError, ValidationError } from '../../contracts/errors.js';
 import type { UserKey } from '../../contracts/services.js';
 import {
   buildBlackjackButtons,
+  BLACKJACK_MENU_FOOTER,
   formatHand,
   handValue,
   outcomeLabel,
@@ -404,7 +405,7 @@ function blackjackActiveEmbed(state: BlackjackState, bet: number): EmbedBuilder 
       },
       { name: 'Bet', value: formatCoins(bet), inline: true },
     )
-    .setFooter({ text: 'Hit, Stand, Double, or Quit — 60s to act' });
+    .setFooter({ text: BLACKJACK_MENU_FOOTER });
 }
 
 function blackjackResultEmbed(

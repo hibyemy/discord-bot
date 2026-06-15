@@ -11,6 +11,7 @@ import { emitLevelUpEvents } from '../hooks.js';
 import { achievementService, progressionService, questService } from '../../services/index.js';
 import { embedColors, errorEmbed, formatCoins, progressBar } from '../../utils/embeds.js';
 import { questConfig } from '../../config/quests.js';
+import { questResetLine } from '../../utils/daily-reset.js';
 
 export const QUEST_CLAIM_PREFIX = 'quests:claim:';
 
@@ -57,8 +58,8 @@ export function questBoardEmbed(board: QuestBoard): EmbedBuilder {
 
   return new EmbedBuilder()
     .setColor(board.claimed ? embedColors.success : embedColors.info)
-    .setTitle('Daily Quests')
-    .setDescription(questLines.join('\n\n'))
+    .setTitle('Hourly Quests')
+    .setDescription(`${questLines.join('\n\n')}\n\n_${questResetLine()}_`)
     .setFooter({ text: footerParts.join(' • ') });
 }
 

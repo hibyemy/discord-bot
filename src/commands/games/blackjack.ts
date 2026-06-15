@@ -4,6 +4,7 @@ import { getGame } from '../../config/games.js';
 import { guildConfigService, progressionService } from '../../services/index.js';
 import {
   buildBlackjackButtons,
+  BLACKJACK_ACTIVE_FOOTER,
   formatHand,
   handValue,
   outcomeLabel,
@@ -49,7 +50,7 @@ function activeHandEmbed(
     .setFooter(
       footer
         ? { text: footer }
-        : { text: 'Hit, Stand, or Double — 60s to act' },
+        : { text: BLACKJACK_ACTIVE_FOOTER },
     );
 }
 
@@ -131,7 +132,7 @@ async function assertCanPlay(guildId: string, key: ReturnType<typeof userKey>): 
 const command: Command = {
   data: new SlashCommandBuilder()
     .setName('blackjack')
-    .setDescription('Play blackjack — hit, stand, or double down')
+    .setDescription('Play blackjack — hit, stand, or double (dealer stands on 17)')
     .addIntegerOption((option) =>
       option.setName('bet').setDescription('Wager amount').setRequired(true).setMinValue(1),
     ),

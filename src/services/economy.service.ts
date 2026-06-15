@@ -13,7 +13,7 @@ import type {
   TransferOptions,
   UserKey,
 } from '../contracts/services.js';
-import { economyConfig, maxBetForLevel } from '../config/economy.js';
+import { economyConfig, dailyRewardForStreak, dailyStreakPayMultiplier, maxBetForLevel } from '../config/economy.js';
 import { prisma } from '../db.js';
 import { guildConfigService } from './guild-config.service.js';
 
@@ -150,13 +150,10 @@ export class EconomyService implements IEconomyService {
         }
       }
 
-      const streakMultiplier =
-        newStreak >= economyConfig.dailyStreakMultiplierDay
-          ? economyConfig.dailyStreakMultiplier
-          : 1;
+      const streakMultiplier = dailyStreakPayMultiplier(newStreak);
       const guildConfig = await guildConfigService.getConfig(key.guildId);
       const multiplier = streakMultiplier * guildConfig.dailyBonusMultiplier;
-      const amount = Math.floor(economyConfig.dailyBaseReward * multiplier);
+      const amount = Math.floor(dailyRewardForStreak(newStreak) * guildConfig.dailyBonusMultiplier);
 
       await this.transferInTx(tx, key, {
         amount,
