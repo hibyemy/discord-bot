@@ -14,6 +14,10 @@ export interface GameDefinition {
   description: string;
   interactive: boolean;
   sessionTimeoutMs: number;
+  /** Crash only: rare bonus round chance (0–1). */
+  bonusChance?: number;
+  bonusMin?: number;
+  bonusMax?: number;
 }
 
 export const gamesConfig = {
@@ -69,10 +73,14 @@ export const gamesConfig = {
       id: 'crash',
       name: 'Crash',
       unlockLevel: 8,
-      houseEdge: 0.04,
-      description: 'Ride the multiplier — cash out before the crash (5% bonus: 100x–500x).',
+      houseEdge: 0.07,
+      description: 'Ride the multiplier — cash out before the crash (1% bonus: 100x–500x).',
       interactive: true,
       sessionTimeoutMs: 60_000,
+      /** Rare bonus round: crash point rolls 100x–500x instead of the normal distribution. */
+      bonusChance: 0.01,
+      bonusMin: 100,
+      bonusMax: 500,
     },
   ] satisfies GameDefinition[],
 } as const;

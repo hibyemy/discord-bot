@@ -61,15 +61,14 @@ export function parseCrashQuitId(customId: string): string | null {
   return sessionId.length > 0 ? sessionId : null;
 }
 
-/** 5% chance the round is a bonus with a much higher crash point (normal distribution otherwise). */
-const CRASH_BONUS_CHANCE = 0.05;
-const CRASH_BONUS_MIN = 100;
-const CRASH_BONUS_MAX = 500;
-
-/** Generate crash point using ~4% house edge distribution, with a rare 100x–500x bonus. */
+/** Generate crash point using configured house edge, with a rare bonus tail. */
 export function generateCrashPoint(): number {
-  if (Math.random() < CRASH_BONUS_CHANCE) {
-    return CRASH_BONUS_MIN + Math.floor(Math.random() * (CRASH_BONUS_MAX - CRASH_BONUS_MIN + 1));
+  const bonusChance = crashConfig.bonusChance ?? 0;
+  const bonusMin = crashConfig.bonusMin ?? 100;
+  const bonusMax = crashConfig.bonusMax ?? 500;
+
+  if (bonusChance > 0 && Math.random() < bonusChance) {
+    return bonusMin + Math.floor(Math.random() * (bonusMax - bonusMin + 1));
   }
 
   const houseEdge = crashConfig.houseEdge;
