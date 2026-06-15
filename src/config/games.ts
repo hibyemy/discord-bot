@@ -70,7 +70,7 @@ export const gamesConfig = {
       name: 'Crash',
       unlockLevel: 8,
       houseEdge: 0.04,
-      description: 'Ride the multiplier — cash out before the crash.',
+      description: 'Ride the multiplier — cash out before the crash (5% bonus: 100x–500x).',
       interactive: true,
       sessionTimeoutMs: 60_000,
     },
